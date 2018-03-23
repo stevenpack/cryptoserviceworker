@@ -3,19 +3,92 @@ import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 ///===========///
 
-export class ApiRacer {
-  race(req: Request, responders: IHttpResponder[]): Promise<Response> {
-    let arr = responders.map(r => r.getResponse(req));
-    return Promise.race(arr);
-  }
-}
-
 export interface IHttpResponder {
   getResponse(req: Request): Promise<Response>;
 }
 
 export interface ICryptoSpotApi {
   getSpot(code: string): Promise<SpotPrice>;
+}
+
+/**
+ * /api/race/spot/btc-usd
+ * /api/aggregate/spot/btc-usd
+ *
+ * /api/gdax/spot/btc-usd
+ */
+export class RequestParser {
+
+  types: string[];
+  providers: string[];
+  actions: string[];
+  
+  constructor() {
+    this.actions = ["race", "all"];
+    this.providers = ["gdax", "bitfinex"];
+    this.types = ["spot"];
+  }
+
+  public validate(req: Request) {
+    if (req.method.toUpperCase() !== "GET") {
+      return new Response("", {
+        status: 405,
+        statusText: "Only GET supported at thsi time"
+      } )
+    }    
+
+    const help = "The API request should be of the form https://cryptoserviceworker.com/api/[race]|[all]|[provider]/spot/<base>|<target>\r\n" +
+    " for example, https://cryptoserviceworker.com/api/race/btc-usd or https://cryptoserviceworker.com/api/gdax/btc-usd\r\n";
+
+    try{
+      let parts = req.url.split('/');
+      //0 'https:',
+      //1   '',
+      //2   'cryptoserviceworker.com',
+      //3   'api',
+      //4   'race',
+      //5   'spot',
+      //6   'btc-usd' 
+  
+      if (parts[3] !== "api") {
+        return this.badRequest(help);
+      }
+  
+      if (this.actions.indexOf(parts[4]) == -1 && this.providers.indexOf(parts[4]) == -1) {
+        return this.badRequest(help);
+      }
+
+      if (this.types.indexOf(parts[5]) == -1) {
+        return this.badRequest(help);
+      }
+
+    } catch (e) {
+      //TOOD: debug header if enabled.
+      return this.badRequest(help);
+    }
+    return null;
+  }
+
+  private badRequest(statusText: string): Response {
+    return new Response("", {
+      status: 400,
+      statusText: statusText
+    })
+  }
+
+  private parse(url: string) {
+    
+    // let  = url.split("/")
+    // let scheme = parts[0];
+
+  }
+}
+
+export class ApiRacer {
+  race(req: Request, responders: IHttpResponder[]): Promise<Response> {
+    let arr = responders.map(r => r.getResponse(req));
+    return Promise.race(arr);
+  }
 }
 
 export class SpotPrice {

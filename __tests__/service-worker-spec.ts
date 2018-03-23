@@ -1,4 +1,4 @@
-import { ApiRacer, IHttpResponder, GdaxSpotProvider, SpotPrice, BitfinexSpotProvider } from '../src/service-worker';
+import { ApiRacer, IHttpResponder, GdaxSpotProvider, SpotPrice, BitfinexSpotProvider, RequestParser } from '../src/service-worker';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 
@@ -15,6 +15,54 @@ class DelayedResponder implements IHttpResponder {
     });
   }
 }
+
+
+test('request parser GET only', () => {
+  let req = new Request("https://cryptoserviceworker.com/api/race/spot/btc-usd", {
+    method: "POST"
+  })
+  let parser = new RequestParser();
+  let response = parser.validate(req);
+
+  expect(response).not.toBeNull();
+  expect(response.status).toEqual(405); //method not allowed
+});
+
+test('bad requests are 400', () => {
+
+  let badUrls = [
+    "https://cryptoserviceworker.com/apiXX/race/spot/btc-usd",
+    "https://cryptoserviceworker.com/api/XXX/spot/btc-usd",
+    "https://cryptoserviceworker.com/api/race/XXX/btc-usd",
+    "https://cryptoserviceworker.com/rando",
+    "https://cryptoserviceworker.com/*&()&*)&(*UIKJ",
+  ];
+
+  let badRequests = badUrls.map(url => new Request(url, { method: "GET" }))
+  let parser = new RequestParser();
+  for (let badReq of badRequests) {
+    let res = parser.validate(badReq);
+    expect(res).not.toBeNull();
+    expect(res.status).toEqual(400);
+  }
+});
+
+test('good requests do not trigger validation errors', () => {
+
+  let goodUrls = [
+    "https://cryptoserviceworker.com/api/race/spot/btc-usd",
+    "https://cryptoserviceworker.com/api/all/spot/btc-usd",
+    "https://cryptoserviceworker.com/api/gdax/spot/btc-usd",
+    "https://cryptoserviceworker.com/api/race/spot/ltc-aud",
+  ];
+
+  let badRequests = goodUrls.map(url => new Request(url, { method: "GET" }))
+  let parser = new RequestParser();
+  for (let badReq of badRequests) {
+    let res = parser.validate(badReq);
+    expect(res).toBeNull();
+  }
+});
 
 test('fastest wins', async () => {
   let responders = [
