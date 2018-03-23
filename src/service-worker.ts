@@ -26,6 +26,8 @@ export class SpotPrice {
 /**
  * Returns a spot price from GDAX.
  * 
+ * Code format is <BASE>-<TARGETt>
+ * 
  * GDAX response looks like this:
  * {
  *  "trade_id":40240431,
@@ -57,13 +59,38 @@ private async parseSpot(code: string, res: Response): Promise<SpotPrice> {
   }
 }
 
+/**
+ * Bitfinex Provider
+ * 
+ * Code format is <base><target>
+ * 
+* {
+    "mid":"244.755",
+    "bid":"244.75",
+    "ask":"244.76",
+    "last_price":"244.82",
+    "low":"244.2",
+    "high":"248.19",
+    "volume":"7842.11542563",
+    "timestamp":"1444253422.348340958"
+  }
+ */
 export class BitfinexSpotProvider implements ICryptoSpotApi, IHttpResponder {
 
-  getResponse(req: Request): Promise<Response> {
-    throw new Error("Method not implemented.");
+  async getResponse(req: Request): Promise<Response> {
+    let code = "btcusd"; req.url;//TODO: extract
+    let spot = await this.getSpot(code)
+    
+    return new Response(JSON.stringify(spot));
   }
-  getSpot(code: string): Promise<SpotPrice> {
-    throw new Error("Method not implemented.");
+  async getSpot(code: string): Promise<SpotPrice> {
+    let res = await fetch(`https://api.bitfinex.com/v1/pubticker/${code}`);
+    return this.parseSpot(code, res);
+  }
+
+  private async parseSpot(code: string, res: Response): Promise<SpotPrice> {
+    let json: any = await res.json();
+    return new SpotPrice(code, json.last_price, new Date(parseFloat(json.timestamp) * 1000).toISOString())
   }
 }
 

@@ -1,4 +1,4 @@
-import { ApiRacer, IHttpResponder, GdaxSpotProvider, SpotPrice } from '../src/service-worker';
+import { ApiRacer, IHttpResponder, GdaxSpotProvider, SpotPrice, BitfinexSpotProvider } from '../src/service-worker';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 
@@ -35,4 +35,14 @@ test('INT: gdax spot', async() => {
   let spot: SpotPrice = await res.json();
   console.log(`${JSON.stringify(spot)}`);
   expect(spot.code).toEqual("btc-usd");
+}); 
+
+test('INT: bitfinex spot', async() => {
+  let bitfinex = new BitfinexSpotProvider();
+  let res = await bitfinex.getResponse(new Request("http://somerequest/abc"))
+  expect(res).not.toBeNull();
+  expect(res.body).not.toBeNull();
+  let spot: SpotPrice = await res.json();
+  console.log(`${JSON.stringify(spot)}`);
+  expect(spot.code).toEqual("btcusd");
 }); 
