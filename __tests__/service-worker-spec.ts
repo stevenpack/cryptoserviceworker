@@ -1,4 +1,4 @@
-import { ApiRacer, IHttpResponder, GdaxSpotProvider, SpotPrice, BitfinexSpotProvider, RequestParser, RequestContext, ResponseContext } from '../src/service-worker';
+import { ApiRacer, IHttpResponder, GdaxSpotProvider, SpotPrice, BitfinexSpotProvider, RequestParser, RequestContext, ResponseContext, RequestHandler } from '../src/service-worker';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 
@@ -118,5 +118,28 @@ test('INT: bitfinex spot', async() => {
   expect(res.response.body).not.toBeNull();
   let spot: SpotPrice = await res.response.json();
   console.log(`${JSON.stringify(spot)}`);
-  expect(spot.symbol).toEqual("btcusd");
+  expect(spot.symbol).toEqual("btc-usd");
+}); 
+
+test('INT: fastest spot', async() => {
+  let req = new Request("https://cryptoserviceworker.com/api/race/spot/btc-usd");
+  let handler = new RequestHandler();
+  let res = await  handler.handle(req);
+  console.log("INT: fastest");
+  console.log(res.body);
+}); 
+
+test('INT: aggregate spot', async() => {
+  let req = new Request("https://cryptoserviceworker.com/api/all/spot/btc-usd");
+  let handler = new RequestHandler();
+  let res = await handler.handle(req);
+  console.log("INT: all");
+  let result = await res.json();
+  console.log(JSON.stringify(result));
+  //Check for multiple results
+  //TODO: string formatting...
+  // expect(result["gdax"].symbol).toEqual("btc-usd")
+  // expect(result["bitfinex"].symbol).toEqual("btc-usd");
+  // expect(result["xxx"]).toBeUndefined();
+  
 }); 
