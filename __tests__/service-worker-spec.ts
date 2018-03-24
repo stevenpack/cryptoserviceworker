@@ -1,4 +1,4 @@
-import { ApiRacer, IHttpResponder, GdaxSpotProvider, SpotPrice, BitfinexSpotProvider, RequestParser } from '../src/service-worker';
+import { ApiRacer, IHttpResponder, GdaxSpotProvider, SpotPrice, BitfinexSpotProvider, RequestParser, RequestContext, ResponseContext } from '../src/service-worker';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 
@@ -7,10 +7,10 @@ const racer = new ApiRacer();
 class DelayedResponder implements IHttpResponder {
   constructor(private delay: number, private response: string) {}
 
-  getResponse(req: Request): Promise<Response> {
+  getResponse(req: RequestContext): Promise<ResponseContext> {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
-        resolve(new Response(this.response));
+        resolve(new ResponseContext("delayer", new Response(this.response)));
       }, this.delay);
     });
   }
@@ -34,6 +34,7 @@ test('bad requests are 400', () => {
     "https://cryptoserviceworker.com/apiXX/race/spot/btc-usd",
     "https://cryptoserviceworker.com/api/XXX/spot/btc-usd",
     "https://cryptoserviceworker.com/api/race/XXX/btc-usd",
+    "https://cryptoserviceworker.com/api/race/spot/btcusd",
     "https://cryptoserviceworker.com/rando",
     "https://cryptoserviceworker.com/*&()&*)&(*UIKJ",
   ];
@@ -64,33 +65,58 @@ test('good requests do not trigger validation errors', () => {
   }
 });
 
+test('parse action requests', () => {
+  let url = "https://cryptoserviceworker.com/api/race/spot/btc-usd";
+  let parser = new RequestParser();
+  let reqCtx = parser.parse(new Request(url, { method: "GET" }));
+  expect(reqCtx.action).toEqual("race");
+  expect(reqCtx.provider).toEqual("");
+});
+
+test('parse provider requests', () => {
+
+  let url = "https://cryptoserviceworker.com/api/gdax/spot/btc-usd";
+  let parser = new RequestParser();
+  let reqCtx = parser.parse(new Request(url, { method: "GET" }));
+  expect(reqCtx.action).toEqual("");
+  expect(reqCtx.provider).toEqual("gdax");
+});
+
 test('fastest wins', async () => {
   let responders = [
     new DelayedResponder(10, 'fast'),
     new DelayedResponder(100, 'slow'),
   ];
-  let req = new Request('btc-usd');
-  let res = await racer.race(req, responders);
-  console.log(`winner: ${res.body}`);
-  expect(res.body).toEqual('fast');
+  let req = new Request("https://cryptoserviceworker.com/api/gdax/spot/btc-usd");
+  let parser = new RequestParser();
+  let reqCtx = parser.parse(req);
+  let res = await racer.race(reqCtx, responders);
+  console.log(`winner: ${res.provider}`);
+  expect(res.response.body).toEqual('fast');
 });
 
 test('INT: gdax spot', async() => {
   let gdax = new GdaxSpotProvider();
-  let res = await gdax.getResponse(new Request("http://somerequest/abc"))
+  let req = new Request("https://cryptoserviceworker.com/api/gdax/spot/btc-usd");
+  let parser = new RequestParser();
+  let reqCtx = parser.parse(req);
+  let res = await gdax.getResponse(reqCtx);
   expect(res).not.toBeNull();
-  expect(res.body).not.toBeNull();
-  let spot: SpotPrice = await res.json();
+  expect(res.response.body).not.toBeNull();
+  let spot: SpotPrice = await res.response.json();
   console.log(`${JSON.stringify(spot)}`);
-  expect(spot.code).toEqual("btc-usd");
+  expect(spot.symbol).toEqual("btc-usd");
 }); 
 
 test('INT: bitfinex spot', async() => {
   let bitfinex = new BitfinexSpotProvider();
-  let res = await bitfinex.getResponse(new Request("http://somerequest/abc"))
+  let req = new Request("https://cryptoserviceworker.com/api/bitfinex/spot/btc-usd");
+  let parser = new RequestParser();
+  let reqCtx = parser.parse(req);
+  let res = await bitfinex.getResponse(reqCtx);
   expect(res).not.toBeNull();
-  expect(res.body).not.toBeNull();
-  let spot: SpotPrice = await res.json();
+  expect(res.response.body).not.toBeNull();
+  let spot: SpotPrice = await res.response.json();
   console.log(`${JSON.stringify(spot)}`);
-  expect(spot.code).toEqual("btcusd");
+  expect(spot.symbol).toEqual("btcusd");
 }); 

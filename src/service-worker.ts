@@ -4,29 +4,100 @@ import { Response } from 'node-fetch';
 ///===========///
 
 export interface IHttpResponder {
-  getResponse(req: Request): Promise<Response>;
+  getResponse(req: RequestContext): Promise<ResponseContext>;
 }
 
 export interface ICryptoSpotApi {
-  getSpot(code: string): Promise<SpotPrice>;
+  getSpot(symbol: string): Promise<SpotPrice>;
+}
+
+export interface ISymbolFormatter {
+  format(symbol: Symbol) : string;
+}
+
+export class Symbol {
+  constructor(public base: string, public target: string) {    
+  }
+}
+
+export class SpotPrice {
+  constructor(public symbol: string, public price: string, public utcTime: string, ) {    
+  }
+}
+
+export class RequestContext {
+  constructor(public symbol: Symbol, public action: string, public type: string, public provider: string = "") {    
+  }
+}
+
+export class ResponseContext {
+  constructor(public provider: string, public response: Response) {
+  }
+}
+
+export class RequestHandler {
+  
+  constructor(private parser: RequestParser) {    
+  }
+
+  public async handle(req: Request) : Promise<Response> {
+    let error = this.parser.validate(req);
+    if (error) {
+      return error;
+    }
+
+    let responders = [new GdaxSpotProvider(), new BitfinexSpotProvider()];
+    let reqCtx = this.parser.parse(req);
+
+    let requestType = `${reqCtx.action}-${reqCtx.type}`;
+
+    switch (requestType) {
+      case "race-spot":
+        let racer = new ApiRacer();
+        let responseCtx = await racer.race(reqCtx, responders);
+        console.log("winner: " + responseCtx.provider);
+        return responseCtx.response;
+      default:
+        return Promise.resolve(new Response("", { status: 405 }));
+    }      
+  }
+}
 }
 
 /**
  * /api/race/spot/btc-usd
  * /api/aggregate/spot/btc-usd
- *
  * /api/gdax/spot/btc-usd
  */
 export class RequestParser {
 
-  types: string[];
-  providers: string[];
-  actions: string[];
-  
+  private types: string[];
+  private providers: string[];
+  private actions: string[];
+
   constructor() {
     this.actions = ["race", "all"];
     this.providers = ["gdax", "bitfinex"];
     this.types = ["spot"];
+  }
+
+  public parse(req: Request) : RequestContext {
+
+    let parts = req.url.split('/');
+    
+    let firstOrDefault = (arr: string[], item: string): string => {
+      let index = arr.findIndex(x => x === item);
+      return index > -1 ? arr[index] : "";
+    }
+
+    //One or the other (action or provider);
+    let action: string = firstOrDefault(this.actions, parts[4]);
+    let provider: string = firstOrDefault(this.providers, parts[4]);
+    let type = parts[5];
+    let symbolParts = parts[6].split("-");
+    let symbol = new Symbol(symbolParts[0], symbolParts[1]);
+    
+    return new RequestContext(symbol, action, type, provider);
   }
 
   public validate(req: Request) {
@@ -49,6 +120,10 @@ export class RequestParser {
       //4   'race',
       //5   'spot',
       //6   'btc-usd' 
+
+      if (parts === null || parts.length !== 7) {
+        return this.badRequest(help);
+      }
   
       if (parts[3] !== "api") {
         return this.badRequest(help);
@@ -61,6 +136,19 @@ export class RequestParser {
       if (this.types.indexOf(parts[5]) == -1) {
         return this.badRequest(help);
       }
+
+      let isNullOrEmpty = (value: string) => {
+        return (!value || value == undefined || value == "" || value.length == 0);
+      }
+
+      let symbol = parts[6];
+      let symbolParts = parts[6].split("-");
+      if (
+        symbolParts.length !== 2 || //2 parts, base and target
+        isNullOrEmpty(symbolParts[0]) || isNullOrEmpty(symbolParts[1])) //base and target
+        {
+          return this.badRequest(help);
+        }
 
     } catch (e) {
       //TOOD: debug header if enabled.
@@ -75,32 +163,20 @@ export class RequestParser {
       statusText: statusText
     })
   }
-
-  private parse(url: string) {
-    
-    // let  = url.split("/")
-    // let scheme = parts[0];
-
-  }
 }
 
 export class ApiRacer {
-  race(req: Request, responders: IHttpResponder[]): Promise<Response> {
+  race(req: RequestContext, responders: IHttpResponder[]): Promise<ResponseContext> {
     let arr = responders.map(r => r.getResponse(req));
     return Promise.race(arr);
   }
 }
 
-export class SpotPrice {
-  constructor(public code: string, public price: string, public utcTime: string, ) {    
-  }
-}
-
 /**
  * Returns a spot price from GDAX.
- * 
- * Code format is <BASE>-<TARGETt>
- * 
+ *
+ * Symbol format is <BASE>-<TARGETt>
+ *
  * GDAX response looks like this:
  * {
  *  "trade_id":40240431,
@@ -113,29 +189,37 @@ export class SpotPrice {
  * }
  */
 export class GdaxSpotProvider implements ICryptoSpotApi, IHttpResponder {
-  async getResponse(req: Request): Promise<Response> {
+  async getResponse(req: RequestContext): Promise<ResponseContext> {
     
-    let code = "btc-usd"; req.url;//TODO: extract
-    let spot = await this.getSpot(code)
+    let fmt = new GdaxSymbolFormatter();
+    let symbolFmt = fmt.format(req.symbol)
+    let spot = await this.getSpot(symbolFmt);
     
-    return new Response(JSON.stringify(spot));
+    let response = new Response(JSON.stringify(spot));
+    return new ResponseContext("gdax", response);
   }
 
-  public async getSpot(code: string): Promise<SpotPrice> {
-    let res = await fetch(`https://api.gdax.com/products/${code}/ticker`);
-    return this.parseSpot(code, res);
+  public async getSpot(symbol: string): Promise<SpotPrice> {
+    let res = await fetch(`https://api.gdax.com/products/${symbol}/ticker`);
+    return this.parseSpot(symbol, res);
   }
 
-private async parseSpot(code: string, res: Response): Promise<SpotPrice> {
+private async parseSpot(symbol: string, res: Response): Promise<SpotPrice> {
     let json: any = await res.json();
-    return new SpotPrice(code, json.price, json.time)
+    return new SpotPrice(symbol, json.price, json.time)
+  }
+}
+
+export class GdaxSymbolFormatter implements ISymbolFormatter {
+  format(symbol: Symbol): string {
+    return `${symbol.base}-${symbol.target}`
   }
 }
 
 /**
  * Bitfinex Provider
  * 
- * Code format is <base><target>
+ * Symbola format is <base><target>
  * 
 * {
     "mid":"244.755",
@@ -150,22 +234,33 @@ private async parseSpot(code: string, res: Response): Promise<SpotPrice> {
  */
 export class BitfinexSpotProvider implements ICryptoSpotApi, IHttpResponder {
 
-  async getResponse(req: Request): Promise<Response> {
-    let code = "btcusd"; req.url;//TODO: extract
-    let spot = await this.getSpot(code)
+  async getResponse(req: RequestContext): Promise<ResponseContext> {
+
+    let fmt = new BitfinexSymbolFormatter();
+    let symbolFmt = fmt.format(req.symbol)
+    let spot = await this.getSpot(symbolFmt)
     
-    return new Response(JSON.stringify(spot));
-  }
-  async getSpot(code: string): Promise<SpotPrice> {
-    let res = await fetch(`https://api.bitfinex.com/v1/pubticker/${code}`);
-    return this.parseSpot(code, res);
+    let response = new Response(JSON.stringify(spot));
+    return new ResponseContext("bitfinex", response);
   }
 
-  private async parseSpot(code: string, res: Response): Promise<SpotPrice> {
+  async getSpot(symbol: string): Promise<SpotPrice> {
+    let res = await fetch(`https://api.bitfinex.com/v1/pubticker/${symbol}`);
+    return this.parseSpot(symbol, res);
+  }
+
+  private async parseSpot(symbol: string, res: Response): Promise<SpotPrice> {
     let json: any = await res.json();
-    return new SpotPrice(code, json.last_price, new Date(parseFloat(json.timestamp) * 1000).toISOString())
+    return new SpotPrice(symbol, json.last_price, new Date(parseFloat(json.timestamp) * 1000).toISOString())
   }
 }
+
+export class BitfinexSymbolFormatter implements ISymbolFormatter {
+  format(symbol: Symbol): string {
+    return `${symbol.base}${symbol.target}`
+  }
+}
+
 
 // let a = new CoinbaseProvider();
 // let spot = a.getSpot('BTC-USD');
