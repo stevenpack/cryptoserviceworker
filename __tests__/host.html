@@ -1,0 +1,26 @@
+<html>
+    <head>      
+        <script src="https://jpillora.com/xhook/dist/xhook.min.js"></script>  
+        <script type="text/javascript" src="../lib/bundle.js"></script>
+        <script type="text/javascript">
+
+            function send() {
+                var oReq = new XMLHttpRequest();
+                oReq.open("GET", "file:///Volumes/HD2/Code/cloudflare/service-worker/__tests__/host.html");
+                oReq.send();
+            }
+
+            xhook.after(function(request, response) {
+                request.url = "https://www.cryptoserviceworker.com/api/race/spot/btc-usd";
+                let handler = new exports.RequestHandler();
+                let res = handler.handle(request);
+                console.log(JSON.stringify(res));
+                return res;
+            });
+
+        </script>
+    </head>
+    <body>
+        <button onclick="send()">Send</button>
+    </body>
+</html>

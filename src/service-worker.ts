@@ -1,10 +1,58 @@
 import fetch from 'node-fetch';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
+
 ///===========///
 
 export interface IHttpResponder {
   getResponse(req: RequestContext): Promise<ResponseContext>;
+}
+
+export interface IInterceptor {
+  intercept(req: RequestContext, res: ResponseContext) : ResponseContext;
+}
+
+export interface ILogger {
+  log(logLine: string): void;
+  getLines() : string[];
+}
+
+/**
+ * TODO: This should be general, potentially with a <T> for the request.
+ * 
+ */
+export class RequestContext implements ILogger {  
+
+  public logLines: string[];
+  constructor(
+    public request: Request,
+    public symbol: Symbol,
+    public action: string,
+    public type: string,
+    public provider: string = ''
+  ) {
+    this.logLines = [];
+  }
+  log(logLine: string): void {
+    this.logLines.push(logLine);
+  }
+  getLines(): string[] {
+    return this.logLines;
+  }
+}
+
+export class ResponseContext implements ILogger {
+  public logLines: string[];
+  constructor(public meta: string, public response: Response) {
+    this.logLines = [];
+  }
+
+  log(logLine: string): void {
+    this.logLines.push(logLine);
+  }
+  getLines(): string[] {
+    return this.logLines;
+  }
 }
 
 export interface ICryptoSpotApi {
@@ -12,84 +60,93 @@ export interface ICryptoSpotApi {
 }
 
 export interface ISymbolFormatter {
-  format(symbol: Symbol) : string;
+  format(symbol: Symbol): string;
 }
 
 export class Symbol {
-  constructor(public base: string, public target: string) {    
-  }
+  constructor(public base: string, public target: string) {}
 
   public toString() {
     return `${this.base}-${this.target}`;
   }
+
+  public static fromString(str: string): Symbol {
+    let symbolParts = str.split('-');
+    return new Symbol(symbolParts[0], symbolParts[1]);
+  }
 }
 
 export class SpotPrice {
-  constructor(public symbol: string, public price: string, public utcTime: string, ) {    
-  }
-}
-
-export class RequestContext {
-  constructor(public symbol: Symbol, public action: string, public type: string, public provider: string = "") {    
-  }
-}
-
-export class ResponseContext {
-  constructor(public meta: string, public response: Response) {
-  }
+  constructor(
+    public symbol: string,
+    public price: string,
+    public utcTime: string
+  ) {}
 }
 
 export class RequestHandler {
-    
+  logInterceptor: LogInterceptor;
+  pingProvider: PingProvider;
   spotAggregator: ApiAggregator;
   spotRacer: ApiRacer;
   bitfinexSpotProvider: BitfinexSpotProvider;
   gdaxSpotProvider: GdaxSpotProvider;
   spotProviders: IHttpResponder[];
-  
-  constructor(private parser: RequestParser = new RequestParser()) { 
-    //IoC       
+
+  constructor(private parser: RequestParser = new RequestParser()) {
+    //IoC
     this.gdaxSpotProvider = new GdaxSpotProvider();
     this.bitfinexSpotProvider = new BitfinexSpotProvider();
     this.spotProviders = [this.gdaxSpotProvider, this.bitfinexSpotProvider];
     this.spotRacer = new ApiRacer(this.spotProviders);
     this.spotAggregator = new ApiAggregator(this.spotProviders);
+    this.pingProvider = new PingProvider();
+    this.logInterceptor = new LogInterceptor();    
   }
 
-  public async handle(req: Request) : Promise<Response> {
+  public async handle(req: Request): Promise<Response> {
     let error = this.parser.validate(req);
     if (error) {
       return error;
     }
     try {
       let reqCtx = this.parser.parse(req);
-      let responder: IHttpResponder = this.route(reqCtx);
+      let responder = this.route(reqCtx);
+      
       let respCtx = await responder.getResponse(reqCtx);
-      return respCtx.response;         
+      
+      //this.interceptors.foreEach(i => response = i.intercept(req, res))
+      respCtx = this.logInterceptor.intercept(reqCtx, respCtx);
+
+      return respCtx.response;
     } catch (e) {
-      return new Response("", {
+      //todo: 400 for parse errors, 500 otherwise      
+      return new Response('', {
         status: 400,
-        statusText: e.message
-      })
+        statusText: e.message,
+      });
     }
   }
 
-  private route(reqCtx: RequestContext) : IHttpResponder {
-    if (reqCtx.type === "spot") {
-      if (reqCtx.action === "race") {
+  private route(reqCtx: RequestContext): IHttpResponder {
+    if (reqCtx.type === 'spot') {
+      if (reqCtx.action === 'race') {
         return this.spotRacer;
       }
-      if (reqCtx.action === "all") {
+      if (reqCtx.action === 'all') {
         return this.spotAggregator;
       }
     }
-    if (reqCtx.provider === "gdax") {
+    if (reqCtx.action === 'ping') {
+      return this.pingProvider;
+    }
+    if (reqCtx.provider === 'gdax') {
       return this.gdaxSpotProvider;
     }
-    if (reqCtx.provider == "bitfinex") {
+    if (reqCtx.provider == 'bitfinex') {
       return this.gdaxSpotProvider;
     }
-    throw new Error("Route not found");
+    throw new Error('Route not found');
   }
 }
 
@@ -99,48 +156,49 @@ export class RequestHandler {
  * /api/gdax/spot/btc-usd
  */
 export class RequestParser {
-
   private types: string[];
   private providers: string[];
   private actions: string[];
 
   constructor() {
-    this.actions = ["race", "all"];
-    this.providers = ["gdax", "bitfinex"];
-    this.types = ["spot"];
+    this.actions = ['race', 'all', 'ping'];
+    this.providers = ['gdax', 'bitfinex'];
+    this.types = ['spot'];
   }
 
-  public parse(req: Request) : RequestContext {
-
+  public parse(req: Request): RequestContext {
     let parts = req.url.split('/');
-    
     let firstOrDefault = (arr: string[], item: string): string => {
       let index = arr.findIndex(x => x === item);
-      return index > -1 ? arr[index] : "";
-    }
+      return index > -1 ? arr[index] : '';
+    };
 
-    //One or the other (action or provider);
+    //One or the other (action OR provider could be 5th e.g. /api/race or api/gdax/);
     let action: string = firstOrDefault(this.actions, parts[4]);
     let provider: string = firstOrDefault(this.providers, parts[4]);
+
+    //TODO: The request context and validation should be specific to the route
+    if (action === 'ping') {
+      console.log("Returning request context...");
+      return new RequestContext(req, null, action, '');
+    }
+
     let type = parts[5];
-    let symbolParts = parts[6].split("-");
-    let symbol = new Symbol(symbolParts[0], symbolParts[1]);
-    
-    return new RequestContext(symbol, action, type, provider);
+    let symbol = Symbol.fromString(parts[6]);
+    return new RequestContext(req, symbol, action, type, provider);
   }
 
   public validate(req: Request) {
-    if (req.method.toUpperCase() !== "GET") {
-      return new Response("", {
+    if (req.method.toUpperCase() !== 'GET') {
+      return new Response('', {
         status: 405,
-        statusText: "GET only supported"
-      } )
-    }    
+        statusText: 'GET only supported',
+      });
+    }
+    const help =
+      'The API request should be of the form https://cryptoserviceworker.com/api/[ping]/[race]|[all]|[provider]/spot/<base>|<target> for example, https://cryptoserviceworker.com/api/race/btc-usd or https://cryptoserviceworker.com/api/gdax/btc-usd';
 
-    const help = "The API request should be of the form https://cryptoserviceworker.com/api/[race]|[all]|[provider]/spot/<base>|<target>\r\n" +
-    " for example, https://cryptoserviceworker.com/api/race/btc-usd or https://cryptoserviceworker.com/api/gdax/btc-usd\r\n";
-
-    try{
+    try {
       let parts = req.url.split('/');
       //0 'https:',
       //1   '',
@@ -148,37 +206,47 @@ export class RequestParser {
       //3   'api',
       //4   'race',
       //5   'spot',
-      //6   'btc-usd' 
+      //6   'btc-usd'
 
-      if (parts === null || parts.length !== 7) {
-        return this.badRequest(help);
-      }
-  
-      if (parts[3] !== "api") {
-        return this.badRequest(help);
-      }
-  
-      if (this.actions.indexOf(parts[4]) == -1 && this.providers.indexOf(parts[4]) == -1) {
+      if (parts === null || parts.length === 0) {
         return this.badRequest(help);
       }
 
+      //Ping
+      if (parts[4] === 'ping') {
+        console.log('validating as OK...');
+        return null;
+      }
+
+      if (parts.length !== 7) {
+        return this.badRequest(help);
+      }
+      if (parts[3] !== 'api') {
+        return this.badRequest(help);
+      }
+      if (
+        this.actions.indexOf(parts[4]) == -1 &&
+        this.providers.indexOf(parts[4]) == -1
+      ) {
+        return this.badRequest(help);
+      }
       if (this.types.indexOf(parts[5]) == -1) {
         return this.badRequest(help);
       }
-
       let isNullOrEmpty = (value: string) => {
-        return (!value || value == undefined || value == "" || value.length == 0);
-      }
+        return !value || value == undefined || value == '' || value.length == 0;
+      };
 
       let symbol = parts[6];
-      let symbolParts = parts[6].split("-");
+      let symbolParts = parts[6].split('-');
       if (
         symbolParts.length !== 2 || //2 parts, base and target
-        isNullOrEmpty(symbolParts[0]) || isNullOrEmpty(symbolParts[1])) //base and target
-        {
-          return this.badRequest(help);
-        }
-
+        isNullOrEmpty(symbolParts[0]) ||
+        isNullOrEmpty(symbolParts[1])
+      ) {
+        //base and target
+        return this.badRequest(help);
+      }
     } catch (e) {
       //TOOD: debug header if enabled.
       return this.badRequest(help);
@@ -187,34 +255,37 @@ export class RequestParser {
   }
 
   private badRequest(statusText: string): Response {
-    return new Response("", {
+    return new Response('', {
       status: 400,
-      statusText: statusText
-    })
+      statusText: statusText,
+    });
   }
 }
 
 export class ApiRacer implements IHttpResponder {
-  constructor(private responders: IHttpResponder[]) {    
-  }
+  constructor(private responders: IHttpResponder[]) {}
   getResponse(req: RequestContext): Promise<ResponseContext> {
     return this.race(req, this.responders);
   }
-  async race(req: RequestContext, responders: IHttpResponder[]): Promise<ResponseContext> {
+  async race(
+    req: RequestContext,
+    responders: IHttpResponder[]
+  ): Promise<ResponseContext> {
     let arr = responders.map(r => r.getResponse(req));
     return Promise.race(arr);
   }
 }
 
 export class ApiAggregator implements IHttpResponder {
-
-  constructor(private responders: IHttpResponder[]) {    
-  }
+  constructor(private responders: IHttpResponder[]) {}
   getResponse(req: RequestContext): Promise<ResponseContext> {
     return this.all(req, this.responders);
   }
 
-  async all(req: RequestContext, responders: IHttpResponder[]): Promise<ResponseContext> {
+  async all(
+    req: RequestContext,
+    responders: IHttpResponder[]
+  ): Promise<ResponseContext> {
     let arr = responders.map(r => r.getResponse(req));
     let responseContextArr = await Promise.all(arr);
     let aggregated: any = {};
@@ -222,7 +293,25 @@ export class ApiAggregator implements IHttpResponder {
       aggregated[responseCtx.meta] = responseCtx.response.body;
     }
     let res = new Response(JSON.stringify(aggregated));
-    return Promise.resolve(new ResponseContext("all", res));    
+    return Promise.resolve(new ResponseContext('all', res));
+  }
+}
+
+export class PingProvider implements IHttpResponder {
+  async getResponse(req: RequestContext): Promise<ResponseContext> {
+    console.log("returning pong response...");
+    let res = new Response('pong');
+    return new ResponseContext("pong", res);
+  }
+}
+
+export class LogInterceptor implements IInterceptor {
+  intercept(req: RequestContext, res: ResponseContext): ResponseContext {
+    let logLines = [];
+    logLines.push(req.logLines);
+    logLines.push(res.logLines);
+    res.response.headers.append("CSW-DEBUG", logLines.join("\r\n"));
+    return res;
   }
 }
 
@@ -243,35 +332,35 @@ export class ApiAggregator implements IHttpResponder {
  * }
  */
 export class GdaxSpotProvider implements ICryptoSpotApi, IHttpResponder {
-  async getResponse(req: RequestContext): Promise<ResponseContext> {    
-    let spot = await this.getSpot(req.symbol);    
+  async getResponse(req: RequestContext): Promise<ResponseContext> {
+    let spot = await this.getSpot(req.symbol);
     let response = new Response(JSON.stringify(spot));
-    return new ResponseContext("gdax", response);
+    return new ResponseContext('gdax', response);
   }
 
   public async getSpot(symbol: Symbol): Promise<SpotPrice> {
     let fmt = new GdaxSymbolFormatter();
-    let symbolFmt = fmt.format(symbol)
+    let symbolFmt = fmt.format(symbol);
     let res = await fetch(`https://api.gdax.com/products/${symbolFmt}/ticker`);
     return this.parseSpot(symbol, res);
   }
 
-private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
-    let json: any = await res.json();
-    return new SpotPrice(symbol.toString(), json.price, json.time)
+  private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
+    let json: any = await res.body;
+    return new SpotPrice(symbol.toString(), json.price, json.time);
   }
 }
 
 export class GdaxSymbolFormatter implements ISymbolFormatter {
   format(symbol: Symbol): string {
-    return `${symbol.base}-${symbol.target}`
+    return `${symbol.base}-${symbol.target}`;
   }
 }
 
 /**
  * Bitfinex Provider
  * 
- * Symbola format is <base><target>
+ * Symbol format is <base><target>
  * 
 * {
     "mid":"244.755",
@@ -285,62 +374,48 @@ export class GdaxSymbolFormatter implements ISymbolFormatter {
   }
  */
 export class BitfinexSpotProvider implements ICryptoSpotApi, IHttpResponder {
-
   async getResponse(req: RequestContext): Promise<ResponseContext> {
-    let spot = await this.getSpot(req.symbol)
+    let spot = await this.getSpot(req.symbol);
     let response = new Response(JSON.stringify(spot));
-    return new ResponseContext("bitfinex", response);
+    return new ResponseContext('bitfinex', response);
   }
 
   async getSpot(symbol: Symbol): Promise<SpotPrice> {
     let fmt = new BitfinexSymbolFormatter();
-    let symbolFmt = fmt.format(symbol)
+    let symbolFmt = fmt.format(symbol);
     let res = await fetch(`https://api.bitfinex.com/v1/pubticker/${symbolFmt}`);
     return this.parseSpot(symbol, res);
   }
 
   private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
     let json: any = await res.json();
-    return new SpotPrice(symbol.toString(), json.last_price, new Date(parseFloat(json.timestamp) * 1000).toISOString())
+    return new SpotPrice(
+      symbol.toString(),
+      json.last_price,
+      new Date(parseFloat(json.timestamp) * 1000).toISOString()
+    );
   }
 }
 
 export class BitfinexSymbolFormatter implements ISymbolFormatter {
   format(symbol: Symbol): string {
-    return `${symbol.base}${symbol.target}`
+    return `${symbol.base}${symbol.target}`;
   }
 }
 
-
-// let a = new CoinbaseProvider();
-// let spot = a.getSpot('BTC-USD');
-
-// window.addEventListener("fetch", event => {
-//   event.respondWith(fetchAndReplace(event.request))
+// addEventListener('fetch', event => {
+//   event.respondWith(fetchAndLog(event.request))
 // })
 
-// async function fetchAndReplace(request: Request) {
-//   // Fetch from origin server.
-//   let response = await fetch(request)
-
-//   // Make sure we only modify text, not images.
-//   let type = response.headers.get("Content-Type") || ""
-//   if (!type.startsWith("text/")) {
-//     // Not text. Don't modify.
-//     return response
-//   }
-
-//   // Read response body.
-//   let text = await response.text()
-
-//   // Modify it.
-//   let modified = text.replace(
-//       /Worker/g, "Minion")
-
-//   // Return modified response.
-//   return new Response(modified, {
-//     status: response.status,
-//     statusText: response.statusText,
-//     headers: response.headers
-//   })
+// /**
+//  * Fetch and log a given request object
+//  * @param {Request} request
+//  */
+// async function fetchAndLog(request) {
+//   // console.log('Got request', request)
+//   // const response = await fetch(request)
+//   // console.log('Got response', response)
+//   // return response
+//   let h = new exports.RequestHandler();
+//   return h.handle(request);
 // }
