@@ -8,8 +8,15 @@ export interface IHttpResponder {
   getResponse(req: RequestContext): Promise<ResponseContext>;
 }
 
-export interface IInterceptor {
+/**
+ * Interfce for adding log information to requests and responses
+ */
+export interface ILogDecorator {
   intercept(req: RequestContext, res: ResponseContext) : ResponseContext;
+}
+
+export interface ILogInjector {
+  inject(log: string, res: Response): void;
 }
 
 export interface ILogger {
@@ -23,17 +30,17 @@ export interface ILogger {
  */
 export class RequestContext implements ILogger {  
 
-  public logLines: string[];
   constructor(
     public request: Request,
     public symbol: Symbol,
     public action: string,
     public type: string,
-    public provider: string = ''
-  ) {
-    this.logLines = [];
-  }
+    public provider: string = '',
+    public logLines: string[] = []
+  ) {}
+
   log(logLine: string): void {
+    console.log(logLine);
     this.logLines.push(logLine);
   }
   getLines(): string[] {
@@ -48,6 +55,7 @@ export class ResponseContext implements ILogger {
   }
 
   log(logLine: string): void {
+    console.log(logLine);
     this.logLines.push(logLine);
   }
   getLines(): string[] {
@@ -85,6 +93,7 @@ export class SpotPrice {
 }
 
 export class RequestHandler {
+  logInjector: LogInterceptor;
   logInterceptor: LogInterceptor;
   pingProvider: PingProvider;
   spotAggregator: ApiAggregator;
@@ -102,6 +111,7 @@ export class RequestHandler {
     this.spotAggregator = new ApiAggregator(this.spotProviders);
     this.pingProvider = new PingProvider();
     this.logInterceptor = new LogInterceptor();    
+    this.logInjector = new LogInterceptor();
   }
 
   public async handle(req: Request): Promise<Response> {
@@ -111,20 +121,19 @@ export class RequestHandler {
     }
     try {
       let reqCtx = this.parser.parse(req);
-      let responder = this.route(reqCtx);
-      
+      let responder = this.route(reqCtx);      
       let respCtx = await responder.getResponse(reqCtx);
-      
-      //this.interceptors.foreEach(i => response = i.intercept(req, res))
       respCtx = this.logInterceptor.intercept(reqCtx, respCtx);
-
       return respCtx.response;
     } catch (e) {
       //todo: 400 for parse errors, 500 otherwise      
-      return new Response('', {
-        status: 400,
-        statusText: e.message,
+      console.log(e);
+      let errResponse =  new Response(e.message, {
+        status: 500,
       });
+      //TODO: DEBUG flag only
+      this.logInjector.inject(e.message, errResponse);
+      return errResponse;
     }
   }
 
@@ -138,6 +147,7 @@ export class RequestHandler {
       }
     }
     if (reqCtx.action === 'ping') {
+      reqCtx.log(`Route: ${reqCtx.request.url} -> 'ping'`)
       return this.pingProvider;
     }
     if (reqCtx.provider === 'gdax') {
@@ -161,7 +171,7 @@ export class RequestParser {
   private actions: string[];
 
   constructor() {
-    this.actions = ['race', 'all', 'ping'];
+    this.actions = ['race', 'all', 'ping', 'direct'];
     this.providers = ['gdax', 'bitfinex'];
     this.types = ['spot'];
   }
@@ -212,6 +222,10 @@ export class RequestParser {
         return this.badRequest(help);
       }
 
+      if (parts[3] !== 'api') {
+        return this.badRequest(help);
+      }
+
       //Ping
       if (parts[4] === 'ping') {
         console.log('validating as OK...');
@@ -219,9 +233,6 @@ export class RequestParser {
       }
 
       if (parts.length !== 7) {
-        return this.badRequest(help);
-      }
-      if (parts[3] !== 'api') {
         return this.badRequest(help);
       }
       if (
@@ -263,7 +274,7 @@ export class RequestParser {
 }
 
 export class ApiRacer implements IHttpResponder {
-  constructor(private responders: IHttpResponder[]) {}
+  constructor(private responders: IHttpResponder[] = []) {}
   getResponse(req: RequestContext): Promise<ResponseContext> {
     return this.race(req, this.responders);
   }
@@ -290,8 +301,8 @@ export class ApiAggregator implements IHttpResponder {
     let responseContextArr = await Promise.all(arr);
     let aggregated: any = {};
     for (let responseCtx of responseContextArr) {
-      aggregated[responseCtx.meta] = responseCtx.response.body;
-    }
+      aggregated[responseCtx.meta] = await responseCtx.response.json();
+    }    
     let res = new Response(JSON.stringify(aggregated));
     return Promise.resolve(new ResponseContext('all', res));
   }
@@ -300,18 +311,26 @@ export class ApiAggregator implements IHttpResponder {
 export class PingProvider implements IHttpResponder {
   async getResponse(req: RequestContext): Promise<ResponseContext> {
     console.log("returning pong response...");
-    let res = new Response('pong');
-    return new ResponseContext("pong", res);
+    const pong = "pong;"
+    let res = new Response(pong);
+    req.log(`Responding with ${pong} and ${res.status}`);
+    return new ResponseContext(pong, res);
   }
 }
 
-export class LogInterceptor implements IInterceptor {
+export class LogInterceptor implements ILogDecorator, ILogInjector {
   intercept(req: RequestContext, res: ResponseContext): ResponseContext {
+    res.log("Executing log interceptor");
     let logLines = [];
     logLines.push(req.logLines);
     logLines.push(res.logLines);
-    res.response.headers.append("CSW-DEBUG", logLines.join("\r\n"));
+    let logStr = encodeURIComponent(logLines.join("\n"));
+    this.inject(logStr, res.response); 
     return res;
+  }
+
+  inject(log: string, res: Response): void {
+    res.headers.append("X-DEBUG", log);
   }
 }
 
