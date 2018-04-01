@@ -171,7 +171,7 @@ export class RequestParser {
   private actions: string[];
 
   constructor() {
-    this.actions = ['race', 'all', 'ping', 'direct'];
+    this.actions = ['race', 'all', 'ping'];
     this.providers = ['gdax', 'bitfinex'];
     this.types = ['spot'];
   }

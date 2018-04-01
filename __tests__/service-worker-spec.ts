@@ -179,10 +179,8 @@ test('INT: aggregate spot', async () => {
   let result = await res.json();
   console.log(JSON.stringify(result));
   //Check for multiple results
-  //TODO: string formatting...
   expect(result["gdax"].symbol).toEqual("btc-usd")
   expect(result["bitfinex"].symbol).toEqual("btc-usd");
-  // expect(result["xxx"]).toBeUndefined();
 });
 
 // test('500 returns error info in debug mode', async() => {
