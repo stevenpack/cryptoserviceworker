@@ -168,29 +168,29 @@ export class BadRequest {
   }
 }
 
-// export class RaceRoute implements IRoute {
-//   match(req: RequestContextBase): IRouteHandler | null {
-//     let url = new URL(req.request.url);
-//     if (url.pathname.startsWith("/api/race/")) {
-//       return new RaceRouteHandler(url)
-//     }
-//     return null;
-//   }
-// }
+export class RaceRoute implements IRoute {
+  match(req: RequestContextBase): IRouteHandler | null {
+    let url = new URL(req.request.url);
+    if (url.pathname.startsWith("/api/race/")) {
+      //return new RaceRouteHandler(url)
+    }
+    return null;
+  }
+}
 
-// export class ApiRacer implements IRouteHandler {
+export class RacerHandler implements IRouteHandler {
 
-//   constructor(private responders: IRouteHandler[] = []) {}
+  constructor(private responders: IRouteHandler[] = []) {}
 
-//   handle(req: RequestContextBase): Promise<Response> {
-//     return this.race(req, this.responders);
-//   }
+  handle(req: RequestContextBase): Promise<Response> {
+    return this.race(req, this.responders);
+  }
 
-//   async race(req: RequestContextBase, responders: IRouteHandler[]): Promise<Response> {
-//     let arr = responders.map(r => r.handle(req));
-//     return Promise.race(arr);
-//   }
-// }
+  async race(req: RequestContextBase, responders: IRouteHandler[]): Promise<Response> {
+    let arr = responders.map(r => r.handle(req));
+    return Promise.race(arr);
+  }
+}
 
 
 

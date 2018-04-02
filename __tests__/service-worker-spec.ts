@@ -1,6 +1,8 @@
 import {
-  Router
-//   IHttpResponder,
+  Router,
+  IRouteHandler,
+  RacerHandler,
+  RequestContextBase
 //   GdaxSpotProvider,
 //   SpotPrice,
 //   BitfinexSpotProvider,
@@ -12,19 +14,20 @@ import {
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 
-// const racer = new ApiRacer();
+const racer = new RacerHandler();
 
-// class DelayedResponder implements IHttpResponder {
-//   constructor(private delay: number, private response: string) {}
+class DelayedResponder implements IRouteHandler {
+  
+  constructor(private delay: number, private response: string) {}
 
-//   getResponse(req: RequestContext): Promise<ResponseContext> {
-//     return new Promise((resolve, reject) => {
-//       setTimeout(() => {
-//         resolve(new ResponseContext('delayer', new Response(this.response)));
-//       }, this.delay);
-//     });
-//   }
-// }
+  handle(req: RequestContextBase): Promise<Response> {
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        resolve(new Response(this.response));
+      }, this.delay);
+    });
+  }
+}
 
 async function pingApi(): Promise<Response> {
   let req = new Request('https://cryptoserviceworker.com/api/ping');
@@ -43,7 +46,7 @@ async function pingApi(): Promise<Response> {
 //   expect(debug.length).toBeGreaterThan(0);
 // });
 
-test('xxPing', async () => {
+test('Ping', async () => {
   let res = await pingApi();
   let result = await res.body;
   console.log(JSON.stringify(result));
@@ -116,20 +119,20 @@ test('xxPing', async () => {
 //   expect(reqCtx.provider).toEqual('gdax');
 // });
 
-// test('fastest wins', async () => {
-//   let responders = [
-//     new DelayedResponder(10, 'fast'),
-//     new DelayedResponder(100, 'slow'),
-//   ];
-//   let req = new Request(
-//     'https://cryptoserviceworker.com/api/gdax/spot/btc-usd'
-//   );
-//   let parser = new RequestParser();
-//   let reqCtx = parser.parse(req);
-//   let res = await racer.race(reqCtx, responders);
-//   console.log(`winner: ${res.meta}`);
-//   expect(res.response.body).toEqual('fast');
-// });
+test('fastest wins', async () => {
+  let responders = [
+    new DelayedResponder(10, 'fast'),
+    new DelayedResponder(100, 'slow'),
+  ];
+  
+  let request = new Request(
+    'https://cryptoserviceworker.com/api/gdax/spot/btc-usd'
+  );
+  let req = new RequestContextBase(request);
+  let res = await racer.race(req, responders);
+  console.log(`winner: ${res.body}`);
+  expect(res.body).toEqual('fast');
+});
 
 // test('INT: gdax spot', async () => {
 //   let gdax = new GdaxSpotProvider();
