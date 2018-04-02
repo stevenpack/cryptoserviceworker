@@ -1,18 +1,41 @@
 import fetch from 'node-fetch';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
+import { URL } from 'url';
 
-///===========///
+//==== Framework ====//
 
-export interface IHttpResponder {
-  getResponse(req: RequestContext): Promise<ResponseContext>;
+export interface IRouter {
+  route(req: RequestContextBase): IRouteHandler
 }
+
+/**
+ * A route
+ * 
+ * TODO: perf: Big object just for matching. Only 1 will be used.
+ *       could be match and just a factory method.
+ */
+export interface IRoute {
+  match(req: RequestContextBase): IRouteHandler | null;
+}
+
+export interface IRouteHandler {
+    handle(req: RequestContextBase): Promise<Response>;
+}
+
+// export interface IRequestParser {
+//   parse<T>(req: Request): RequestContext<T>
+// }  
+
+// export interface IHttpResponder {
+//   getResponse(req: Request): Promise<ResponseContext>;
+// }
 
 /**
  * Interfce for adding log information to requests and responses
  */
 export interface ILogDecorator {
-  intercept(req: RequestContext, res: ResponseContext) : ResponseContext;
+  intercept(req: ILogger, res: ILogger) : ResponseContext;
 }
 
 export interface ILogInjector {
@@ -25,19 +48,14 @@ export interface ILogger {
 }
 
 /**
- * TODO: This should be general, potentially with a <T> for the request.
- * 
+ * Request with logging added
  */
-export class RequestContext implements ILogger {  
 
-  constructor(
-    public request: Request,
-    public symbol: Symbol,
-    public action: string,
-    public type: string,
-    public provider: string = '',
-    public logLines: string[] = []
-  ) {}
+export class RequestContextBase implements ILogger { 
+
+  public logLines: string[] = [];
+  constructor(public request: Request) 
+  {}
 
   log(logLine: string): void {
     console.log(logLine);
@@ -45,13 +63,24 @@ export class RequestContext implements ILogger {
   }
   getLines(): string[] {
     return this.logLines;
+  } 
+}
+
+/**
+ * A wrapper around a Request with a strongly typed request
+ */
+export class RequestContext<T> extends RequestContextBase {
+
+  constructor(public req: Request, public args: T) 
+  {
+    super(req);
   }
 }
 
 export class ResponseContext implements ILogger {
-  public logLines: string[];
-  constructor(public meta: string, public response: Response) {
-    this.logLines = [];
+  public logLines: string[] = [];
+  public meta: any = {};
+  constructor(public response: Response) {
   }
 
   log(logLine: string): void {
@@ -62,6 +91,108 @@ export class ResponseContext implements ILogger {
     return this.logLines;
   }
 }
+
+export class Router implements IRouter {
+
+  routes: IRoute[];
+  constructor() {
+    this.routes = [];
+    //TODO: ioc
+    // this.routes.push([
+      // new RaceMatcher(),
+      // new AggregateMatcher()
+    //])
+  }
+
+  route(req: RequestContextBase): IRouteHandler {
+    let handler: IRouteHandler | null = this.match(req);
+    if (handler) {
+      return handler;
+    }
+    return new NotFoundHandler();
+  }
+ 
+  match(req: RequestContextBase): IRouteHandler | null {
+    for (let route of this.routes) {
+      let handler = route.match(req);
+      if (handler != null)
+        return handler;
+    }
+    return null;
+  }
+}
+
+export class NotFoundHandler implements IRouteHandler {
+  validate(req: RequestContextBase): Response | null {
+    return null;
+  }
+  async handle(req: RequestContextBase): Promise<Response> {
+    return new Response(undefined, {
+      status: 404,
+      statusText: "Unknown route"
+    })
+  }
+}
+
+//==== API ====//
+
+export class BadRequest {
+  public static fromString(statusText: string): Response {
+    return new Response(undefined, {status: 400, statusText: statusText})
+  }
+}
+
+export class RaceRoute implements IRoute {
+  match(req: RequestContextBase): IRouteHandler | null {
+    let url = new URL(req.request.url);
+    if (url.pathname.startsWith("/api/race/")) {
+      return new RaceRouteHandler(url)
+    }
+    return null;
+  }
+}
+
+export class ApiRacer implements IRouteHandler {
+
+  constructor(private responders: IRouteHandler[] = []) {}
+
+  handle(req: RequestContextBase): Promise<Response> {
+    return this.race(req, this.responders);
+  }
+
+  async race(req: RequestContextBase, responders: IRouteHandler[]): Promise<Response> {
+    let arr = responders.map(r => r.handle(req));
+    return Promise.race(arr);
+  }
+}
+
+
+
+//==== Crypto API ====//
+
+export class RaceRouteHandler implements IRouteHandler {
+
+  constructor(private url: URL) {}
+
+  
+  async handle(req: RequestContextBase): Promise<Response> {
+    let parts = this.url.pathname.replace("/api/race", "").split("/");
+    if (parts[0] !== "spot") {
+      return BadRequest.fromString("Only spot supported")
+    }
+    let symbol = Symbol.fromString(parts[1]);
+    //parse the 
+    let racer = new ApiRacer(...)
+    return racer.handle(req);
+  }
+}
+
+// public request: Request,
+// public symbol: Symbol,
+// public action: string,
+// public type: string,
+// public provider: string = '',
+
 
 export interface ICryptoSpotApi {
   getSpot(symbol: Symbol): Promise<SpotPrice>;
@@ -80,6 +211,9 @@ export class Symbol {
 
   public static fromString(str: string): Symbol {
     let symbolParts = str.split('-');
+    if (symbolParts.length != 2 || !symbolParts[0] || !symbolParts[1]) {
+      throw new Error("Invalid symbol");
+    }
     return new Symbol(symbolParts[0], symbolParts[1]);
   }
 }
@@ -91,6 +225,8 @@ export class SpotPrice {
     public utcTime: string
   ) {}
 }
+
+
 
 export class RequestHandler {
   logInjector: LogInterceptor;
@@ -125,8 +261,7 @@ export class RequestHandler {
       let respCtx = await responder.getResponse(reqCtx);
       respCtx = this.logInterceptor.intercept(reqCtx, respCtx);
       return respCtx.response;
-    } catch (e) {
-      //todo: 400 for parse errors, 500 otherwise      
+    } catch (e) {  
       console.log(e);
       let errResponse =  new Response(e.message, {
         status: 500,
@@ -273,19 +408,7 @@ export class RequestParser {
   }
 }
 
-export class ApiRacer implements IHttpResponder {
-  constructor(private responders: IHttpResponder[] = []) {}
-  getResponse(req: RequestContext): Promise<ResponseContext> {
-    return this.race(req, this.responders);
-  }
-  async race(
-    req: RequestContext,
-    responders: IHttpResponder[]
-  ): Promise<ResponseContext> {
-    let arr = responders.map(r => r.getResponse(req));
-    return Promise.race(arr);
-  }
-}
+
 
 export class ApiAggregator implements IHttpResponder {
   constructor(private responders: IHttpResponder[]) {}
@@ -351,10 +474,12 @@ export class LogInterceptor implements ILogDecorator, ILogInjector {
  * }
  */
 export class GdaxSpotProvider implements ICryptoSpotApi, IHttpResponder {
-  async getResponse(req: RequestContext): Promise<ResponseContext> {
+  async getResponse(req: RequestContextBase): Promise<ResponseContext> {
     let spot = await this.getSpot(req.symbol);
     let response = new Response(JSON.stringify(spot));
-    return new ResponseContext('gdax', response);
+    let resCtx = new ResponseContext(response);
+    resCtx.meta["provider"] = "gdax";
+    return resCtx;
   }
 
   public async getSpot(symbol: Symbol): Promise<SpotPrice> {
