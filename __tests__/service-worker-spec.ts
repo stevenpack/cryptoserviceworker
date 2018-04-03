@@ -117,6 +117,19 @@ test('INT: gdax spot', async () => {
   expect(spot.symbol).toEqual('btc-usd');
 });
 
+test('INT: bitfinex spot', async () => {
+  let req = new Request(
+    'https://cryptoserviceworker.com/api/direct/bitfinex/spot/btc-usd'
+  );
+  let router = new Router();
+  let res = await router.handle(req);
+  expect(res).not.toBeNull();
+  expect(res.body).not.toBeNull();
+  console.log(res.body);
+  let spot: SpotPrice = await res.json();
+  console.log(`${JSON.stringify(spot)}`);
+  expect(spot.symbol).toEqual('btc-usd');
+});
 
 // test('bad requests are 400', () => {
 //   let badUrls = [
@@ -173,20 +186,7 @@ test('INT: gdax spot', async () => {
 
 
 
-// test('INT: bitfinex spot', async () => {
-//   let bitfinex = new BitfinexSpotProvider();
-//   let req = new Request(
-//     'https://cryptoserviceworker.com/api/bitfinex/spot/btc-usd'
-//   );
-//   let parser = new RequestParser();
-//   let reqCtx = parser.parse(req);
-//   let res = await bitfinex.getResponse(reqCtx);
-//   expect(res).not.toBeNull();
-//   expect(res.response.body).not.toBeNull();
-//   let spot: SpotPrice = await res.response.json();
-//   console.log(`${JSON.stringify(spot)}`);
-//   expect(spot.symbol).toEqual('btc-usd');
-// });
+
 
 // test('INT: fastest spot', async () => {
 //   let req = new Request(

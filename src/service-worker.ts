@@ -247,7 +247,9 @@ export class DirectRoute implements IRoute {
         switch (provider) {
           case "gdax":
             return new GdaxSpotHandler();
-          default:
+          case "bitfinex"
+            return new BitfinexSpotHandler();
+          default:          
             return new NotFoundHandler();
         }
       }
@@ -291,6 +293,18 @@ export class SpotPrice {
   ) {}
 }
 
+export class DirectParser {
+  public parse(url: URL): {type: string, symbol: Symbol} {
+    
+    let parts = url.pathname
+      .replace("/api/direct/", "") //strip the part we know
+      .split("/") //split
+      .filter(val => val) //filter any empty
+      console.log(parts);
+      return {type: parts[1], symbol: Symbol.fromString(parts[2])};
+  }
+}
+
 // /**
 //  * Returns a spot price from GDAX.
 //  *
@@ -308,12 +322,14 @@ export class SpotPrice {
 //  * }
 //  */
 export class GdaxSpotHandler implements ICryptoSpotApi, IRouteHandler {
+
+  parser = new DirectParser();
+  constructor() {
+  }
+
   async handle(req: RequestContextBase): Promise<Response> {
-    //TODO: parse... now? or when we were crated... this.symbol
-    console.log("not parsing, just assuming btc...");
-    let symbol = "btc-usd";
-    let spot = await this.getSpot(Symbol.fromString(symbol));
-    console.log(spot);
+    let result = this.parser.parse(req.url);
+    let spot = await this.getSpot(Symbol.fromString(result.symbol.toString()));
     return new Response(JSON.stringify(spot));
   }
 
@@ -337,6 +353,57 @@ export class GdaxSymbolFormatter implements ISymbolFormatter {
   }
 }
 
+/**
+ * Bitfinex Provider
+ * 
+ * Symbol format is <base><target>
+ * 
+* {
+    "mid":"244.755",
+    "bid":"244.75",
+    "ask":"244.76",
+    "last_price":"244.82",
+    "low":"244.2",
+    "high":"248.19",
+    "volume":"7842.11542563",
+    "timestamp":"1444253422.348340958"
+  }
+ */
+export class BitfinexSpotHandler implements ICryptoSpotApi, IRouteHandler {
+  
+  parser = new DirectParser();
+  constructor() {
+  }
+  
+  async handle(req: RequestContextBase): Promise<Response> {
+    let result = this.parser.parse(req.url);
+    let spot = await this.getSpot(Symbol.fromString(result.symbol.toString()));
+    return new Response(JSON.stringify(spot));
+
+  }
+
+  async getSpot(symbol: Symbol): Promise<SpotPrice> {
+    let fmt = new BitfinexSymbolFormatter();
+    let symbolFmt = fmt.format(symbol);
+    let res = await fetch(`https://api.bitfinex.com/v1/pubticker/${symbolFmt}`);
+    return this.parseSpot(symbol, res);
+  }
+
+  private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
+    let json: any = await res.json();
+    return new SpotPrice(
+      symbol.toString(), 
+      json.last_price, 
+      new Date(parseFloat(json.timestamp) * 1000).toISOString(), 
+      "bitfinex");
+  }
+}
+
+export class BitfinexSymbolFormatter implements ISymbolFormatter {
+  format(symbol: Symbol): string {
+    return `${symbol.base}${symbol.target}`;
+  }
+}
 
 // /**
 //  * /api/race/spot/btc-usd
@@ -453,51 +520,7 @@ export class GdaxSymbolFormatter implements ISymbolFormatter {
 
 
 
-// /**
-//  * Bitfinex Provider
-//  * 
-//  * Symbol format is <base><target>
-//  * 
-// * {
-//     "mid":"244.755",
-//     "bid":"244.75",
-//     "ask":"244.76",
-//     "last_price":"244.82",
-//     "low":"244.2",
-//     "high":"248.19",
-//     "volume":"7842.11542563",
-//     "timestamp":"1444253422.348340958"
-//   }
-//  */
-// export class BitfinexSpotProvider implements ICryptoSpotApi, IHttpResponder {
-//   async getResponse(req: RequestContext): Promise<ResponseContext> {
-//     let spot = await this.getSpot(req.symbol);
-//     let response = new Response(JSON.stringify(spot));
-//     return new ResponseContext('bitfinex', response);
-//   }
 
-//   async getSpot(symbol: Symbol): Promise<SpotPrice> {
-//     let fmt = new BitfinexSymbolFormatter();
-//     let symbolFmt = fmt.format(symbol);
-//     let res = await fetch(`https://api.bitfinex.com/v1/pubticker/${symbolFmt}`);
-//     return this.parseSpot(symbol, res);
-//   }
-
-//   private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
-//     let json: any = await res.json();
-//     return new SpotPrice(
-//       symbol.toString(),
-//       json.last_price,
-//       new Date(parseFloat(json.timestamp) * 1000).toISOString()
-//     );
-//   }
-// }
-
-// export class BitfinexSymbolFormatter implements ISymbolFormatter {
-//   format(symbol: Symbol): string {
-//     return `${symbol.base}${symbol.target}`;
-//   }
-// }
 
 // addEventListener('fetch', event => {
 //   event.respondWith(fetchAndLog(event.request))
