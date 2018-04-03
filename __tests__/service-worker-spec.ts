@@ -3,7 +3,8 @@ import {
   IRouteHandler,
   RacerHandler,
   RequestContextBase,
-  AllHandler
+  AllHandler,
+  SpotPrice
 //   GdaxSpotProvider,
 //   SpotPrice,
 //   BitfinexSpotProvider,
@@ -102,6 +103,21 @@ test('Routes should care about method', async () => {
   expect(res.status).toEqual(405); //not allowed
 });
 
+test('INT: gdax spot', async () => {
+  let req = new Request(
+    'https://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd'
+  );
+  let router = new Router();
+  let res = await router.handle(req);
+  expect(res).not.toBeNull();
+  expect(res.body).not.toBeNull();
+  console.log(res.body);
+  let spot: SpotPrice = await res.json();
+  console.log(`${JSON.stringify(spot)}`);
+  expect(spot.symbol).toEqual('btc-usd');
+});
+
+
 // test('bad requests are 400', () => {
 //   let badUrls = [
 //     'https://cryptoserviceworker.com/apiXX/race/spot/btc-usd',
@@ -156,20 +172,6 @@ test('Routes should care about method', async () => {
 
 
 
-// test('INT: gdax spot', async () => {
-//   let gdax = new GdaxSpotProvider();
-//   let req = new Request(
-//     'https://cryptoserviceworker.com/api/gdax/spot/btc-usd'
-//   );
-//   let parser = new RequestParser();
-//   let reqCtx = parser.parse(req);
-//   let res = await gdax.getResponse(reqCtx);
-//   expect(res).not.toBeNull();
-//   expect(res.response.body).not.toBeNull();
-//   let spot: SpotPrice = await res.response.json();
-//   console.log(`${JSON.stringify(spot)}`);
-//   expect(spot.symbol).toEqual('btc-usd');
-// });
 
 // test('INT: bitfinex spot', async () => {
 //   let bitfinex = new BitfinexSpotProvider();

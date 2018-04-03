@@ -77,7 +77,8 @@ export class Router implements IRouter {
     this.routes = [
       new PingRoute(),
       new RaceRoute(),
-      new AllRoute()
+      new AllRoute(),
+      new DirectRoute()
     ];
     this.interceptors = [new LogInterceptor];
   }
@@ -234,11 +235,26 @@ export class AllHandler implements IRouteHandler {
   }
 }
 
-// export class DirectRoute implements IRoute {
-//   match(req: RequestContextBase): IRouteHandler | null {
-//     //return new gdax or bitfindex (who parses the request?)
-//   }
-// }
+export class DirectRoute implements IRoute {
+  match(req: RequestContextBase): IRouteHandler | null {
+    if (req.url.pathname.startsWith("/api/direct")) {
+      console.log("Direct...")
+      //Split and filter any empty
+      let parts = req.url.pathname.split("/").filter(val => val);
+      console.log(parts);
+      if (parts.length > 2) {
+        let provider = parts[2];
+        switch (provider) {
+          case "gdax":
+            return new GdaxSpotHandler();
+          default:
+            return new NotFoundHandler();
+        }
+      }
+    }
+    return null;
+  }
+}
 
 //==== Crypto API ====//
 
@@ -294,20 +310,24 @@ export class SpotPrice {
 export class GdaxSpotHandler implements ICryptoSpotApi, IRouteHandler {
   async handle(req: RequestContextBase): Promise<Response> {
     //TODO: parse... now? or when we were crated... this.symbol
-    let spot = await this.getSpot(req.symbol);
+    console.log("not parsing, just assuming btc...");
+    let symbol = "btc-usd";
+    let spot = await this.getSpot(Symbol.fromString(symbol));
+    console.log(spot);
     return new Response(JSON.stringify(spot));
   }
 
   public async getSpot(symbol: Symbol): Promise<SpotPrice> {
     let fmt = new GdaxSymbolFormatter();
     let symbolFmt = fmt.format(symbol);
-    let res = await fetch(`https://api.gdax.com/products/${symbolFmt}/ticker`);
+    let url = `https://api.gdax.com/products/${symbolFmt}/ticker`;
+    let res = await fetch(url);
     return this.parseSpot(symbol, res);
   }
 
   private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
-    let json: any = await res.body;
-    return new SpotPrice("gdax", symbol.toString(), json.price, json.time);
+    let json: any = await res.json();
+    return new SpotPrice(symbol.toString(), json.price, json.time, "gdax");
   }
 }
 
