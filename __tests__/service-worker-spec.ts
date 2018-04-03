@@ -3,7 +3,7 @@ import {
   IRouteHandler,
   RacerHandler,
   RequestContextBase,
-  ApiAggregator
+  AllHandler
 //   GdaxSpotProvider,
 //   SpotPrice,
 //   BitfinexSpotProvider,
@@ -28,22 +28,26 @@ class DelayedResponder implements IRouteHandler {
   }
 }
 
-async function pingApi(): Promise<Response> {
-  let req = new Request('https://cryptoserviceworker.com/api/ping');
+async function pingApi(queryParams: string = ""): Promise<Response> {
+  let req = new Request('https://cryptoserviceworker.com/api/ping' + queryParams);
   let handler = new Router();
   return await handler.handle(req);
 }
 
-// test('xxLogger return log header', async () => {
-//   let res = await pingApi();
-//   expect(res.headers.has('X-DEBUG')).toBeTruthy();
-//   const debug = res.headers.get('X-DEBUG');
-//   console.log("X-DEBUG Contents:");
-//   console.log(debug);
-//   console.log("Decoded");
-//   console.log(decodeURIComponent(debug));
-//   expect(debug.length).toBeGreaterThan(0);
-// });
+test('Log header present on request', async () => {
+  let res = await pingApi("?debug=true");
+  expect(res.headers.has('X-DEBUG')).toBeTruthy();
+  const debug = res.headers.get('X-DEBUG');
+  console.log("X-Debug Decoded:");
+  console.log(decodeURIComponent(debug));
+  expect(debug.length).toBeGreaterThan(0);
+});
+
+test('Log header absent by default ', async () => {
+  let res = await pingApi("?debug=xxx");
+  expect(res.headers.has('X-DEBUG')).toBeFalsy();
+});
+
 
 test('Ping', async () => {
   let res = await pingApi();
@@ -77,7 +81,7 @@ test('All returns all', async() => {
     new DelayedResponder(100, "{\"very_strongly\": \"typed2\"}")    
   ];
   let req = RequestContextBase.fromString("http://cryptoserviceworker.com/api/all/spot/btc-usd");
-  let aggregator = new ApiAggregator(responders);
+  let aggregator = new AllHandler();
   let res = await aggregator.all(req, responders);
   let obj = JSON.parse(await res.text());
   //check our objects are there.

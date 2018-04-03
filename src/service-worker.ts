@@ -23,13 +23,9 @@ export interface IRouteHandler {
     handle(req: RequestContextBase): Promise<Response>;
 }
 
-// export interface IRequestParser {
-//   parse<T>(req: Request): RequestContext<T>
-// }  
-
-// export interface IHttpResponder {
-//   getResponse(req: Request): Promise<ResponseContext>;
-// }
+export interface IInterceptor {
+  process(req: RequestContextBase, res: Response): void;
+}
 
 /**
  * Interfce for adding log information to requests and responses
@@ -100,25 +96,30 @@ export class RequestContextBase implements ILogger {
 export class Router implements IRouter {
 
   routes: IRoute[];
+  interceptors: IInterceptor[];
+
   constructor() {
-    this.routes = [];
-    //TODO: ioc
-    this.routes.push(
-      new PingRoute()
-      // new RaceMatcher(),
-      // new AggregateMatcher()
-    )
+    //no ioc
+    this.routes = [
+      new PingRoute(),
+      new RaceRoute(),
+      new AllRoute()
+    ];
+    this.interceptors = [new LogInterceptor];
   }
 
   async handle(request: Request): Promise<Response> {
     let req = new RequestContextBase(request);
     let handler = this.route(req);
-    return handler.handle(req);
+    let res = await handler.handle(req);
+    this.interceptors.forEach(i => i.process(req, res));
+    return res;
   }
 
   route(req: RequestContextBase): IRouteHandler {
     let handler: IRouteHandler | null = this.match(req);
     if (handler) {
+      req.log(`Found handler for ${req.url.pathname}`);
       return handler;
     }
     return new NotFoundHandler();
@@ -134,6 +135,26 @@ export class Router implements IRouter {
   }
 }
 
+export class LogInterceptor implements IInterceptor {
+  process(req: RequestContextBase, res: Response): void {
+
+    if (req.url.searchParams.get("debug") !== "true") {
+      return;
+    }
+    req.log("Executing log interceptor");
+    let logStr = encodeURIComponent(req.getLines().join("\n"));
+    this.inject(logStr, res); 
+  }
+  inject(log: string, res: Response): void {
+    res.headers.append("X-DEBUG", log);
+  }
+}
+
+// Common handlers
+
+/**
+ * 404 Not Found
+ */
 export class NotFoundHandler implements IRouteHandler {
   validate(req: RequestContextBase): Response | null {
     return null;
@@ -146,6 +167,9 @@ export class NotFoundHandler implements IRouteHandler {
   }
 }
 
+/**
+ * 405 Method Not Allowed
+ */
 export class MethodNotAllowedHandler implements IRouteHandler {
   validate(req: RequestContextBase): Response | null {
     return null;
@@ -190,7 +214,8 @@ export class RaceRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
     let url = new URL(req.request.url);
     if (url.pathname.startsWith("/api/race/")) {
-      //return new RaceRouteHandler(url)
+      //TODO: configure it. Here?
+      return new RacerHandler()
     }
     return null;
   }
@@ -210,30 +235,28 @@ export class RacerHandler implements IRouteHandler {
   }
 }
 
-export class AggregatorRoute {
-
+export class AllRoute implements IRoute {
+  match(req: RequestContextBase): IRouteHandler | null {
+    
+    if (req.url.pathname.startsWith("/api/all/")) {
+      //TODO: configure. here?
+      return new AllHandler();
+    }
+    return null;
+  }
 }
 
-export class ApiAggregator implements IRouteHandler {
+export class AllHandler implements IRouteHandler {
   constructor(private handlers: IRouteHandler[] = []) {}
 
   handle(req: RequestContextBase): Promise<Response> {    
     return this.all(req, this.handlers);
   }
 
-  IsJsonString(str: string) {
-    try {
-        JSON.parse(str);
-    } catch (e) {
-        return false;
-    }
-    return true;
-}
-
   async all(req: RequestContextBase, handlers: IRouteHandler[] ): Promise<Response> {    
     let p = await Promise.all(handlers.map(h => h.handle(req)));        
     let arr = p.map(p => p.body);
-    return new Response(JSON.stringify(arr));
+    return new Response(JSON.stringify(arr));    
   }
 }
 
@@ -492,21 +515,7 @@ export class SpotPrice {
 //   }
 // }
 
-// export class LogInterceptor implements ILogDecorator, ILogInjector {
-//   intercept(req: RequestContext, res: ResponseContext): ResponseContext {
-//     res.log("Executing log interceptor");
-//     let logLines = [];
-//     logLines.push(req.logLines);
-//     logLines.push(res.logLines);
-//     let logStr = encodeURIComponent(logLines.join("\n"));
-//     this.inject(logStr, res.response); 
-//     return res;
-//   }
 
-//   inject(log: string, res: Response): void {
-//     res.headers.append("X-DEBUG", log);
-//   }
-// }
 
 // /**
 //  * Returns a spot price from GDAX.
