@@ -54,9 +54,12 @@ export class RequestContextBase implements ILogger {
 
   public logLines: string[] = [];
   public url: URL;
-  constructor(public request: Request) 
-  {
+  constructor(public request: Request) {
     this.url = new URL(request.url);
+  }
+
+  public static fromString(str: string) {
+    return new RequestContextBase(new Request(str));
   }
 
   log(logLine: string): void {
@@ -143,9 +146,24 @@ export class NotFoundHandler implements IRouteHandler {
   }
 }
 
+export class MethodNotAllowedHandler implements IRouteHandler {
+  validate(req: RequestContextBase): Response | null {
+    return null;
+  }
+  async handle(req: RequestContextBase): Promise<Response> {
+    return new Response(undefined, {
+      status: 405,
+      statusText: "Method not allowed"
+    })
+  }
+}
+
 //==== API ====//
 export class PingRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
+    if (req.request.method !== "GET") {
+      return new MethodNotAllowedHandler();
+    }
     if (req.url.pathname.startsWith("/api/ping")) {
       return new PingRouteHandler();
     }
@@ -192,6 +210,32 @@ export class RacerHandler implements IRouteHandler {
   }
 }
 
+export class AggregatorRoute {
+
+}
+
+export class ApiAggregator implements IRouteHandler {
+  constructor(private handlers: IRouteHandler[] = []) {}
+
+  handle(req: RequestContextBase): Promise<Response> {    
+    return this.all(req, this.handlers);
+  }
+
+  IsJsonString(str: string) {
+    try {
+        JSON.parse(str);
+    } catch (e) {
+        return false;
+    }
+    return true;
+}
+
+  async all(req: RequestContextBase, handlers: IRouteHandler[] ): Promise<Response> {    
+    let p = await Promise.all(handlers.map(h => h.handle(req)));        
+    let arr = p.map(p => p.body);
+    return new Response(JSON.stringify(arr));
+  }
+}
 
 
 //==== Crypto API ====//
@@ -436,26 +480,7 @@ export class SpotPrice {
 
 
 
-// export class ApiAggregator implements IHttpResponder {
-//   constructor(private responders: IHttpResponder[]) {}
-//   getResponse(req: RequestContext): Promise<ResponseContext> {
-//     return this.all(req, this.responders);
-//   }
 
-//   async all(
-//     req: RequestContext,
-//     responders: IHttpResponder[]
-//   ): Promise<ResponseContext> {
-//     let arr = responders.map(r => r.getResponse(req));
-//     let responseContextArr = await Promise.all(arr);
-//     let aggregated: any = {};
-//     for (let responseCtx of responseContextArr) {
-//       aggregated[responseCtx.meta] = await responseCtx.response.json();
-//     }    
-//     let res = new Response(JSON.stringify(aggregated));
-//     return Promise.resolve(new ResponseContext('all', res));
-//   }
-// }
 
 // export class PingProvider implements IHttpResponder {
 //   async getResponse(req: RequestContext): Promise<ResponseContext> {

@@ -2,7 +2,8 @@ import {
   Router,
   IRouteHandler,
   RacerHandler,
-  RequestContextBase
+  RequestContextBase,
+  ApiAggregator
 //   GdaxSpotProvider,
 //   SpotPrice,
 //   BitfinexSpotProvider,
@@ -14,11 +15,9 @@ import {
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 
-const racer = new RacerHandler();
-
 class DelayedResponder implements IRouteHandler {
   
-  constructor(private delay: number, private response: string) {}
+  constructor(private delay: number, private response: any) {}
 
   handle(req: RequestContextBase): Promise<Response> {
     return new Promise((resolve, reject) => {
@@ -53,19 +52,51 @@ test('Ping', async () => {
   expect(res.status).toEqual(200);
 });
 
-// test('request parser GET only', () => {
-//   let req = new Request(
-//     'https://cryptoserviceworker.com/api/race/spot/btc-usd',
-//     {
-//       method: 'POST',
-//     }
-//   );
-//   let parser = new RequestParser();
-//   let response = parser.validate(req);
+test('Fastest wins', async () => {
+  let responders = [
+    new DelayedResponder(10, 'fast'),
+    new DelayedResponder(100, 'slow'),
+  ];
+  
+  let request = new Request(
+    'https://cryptoserviceworker.com/api/gdax/spot/btc-usd'
+  );
+  let req = new RequestContextBase(request);
+  
+  const racer = new RacerHandler();
+  let res = await racer.race(req, responders);
+  console.log(`winner: ${res.body}`);
+  expect(res.body).toEqual('fast');
+});
 
-//   expect(response).not.toBeNull();
-//   expect(response.status).toEqual(405); //method not allowed
-// });
+test('All returns all', async() => {
+  let responders = [
+    new DelayedResponder(50, "text"),
+    new DelayedResponder(75, "text2"),    
+    new DelayedResponder(100, "{\"strongly\": \"typed\"}"),
+    new DelayedResponder(100, "{\"very_strongly\": \"typed2\"}")    
+  ];
+  let req = RequestContextBase.fromString("http://cryptoserviceworker.com/api/all/spot/btc-usd");
+  let aggregator = new ApiAggregator(responders);
+  let res = await aggregator.all(req, responders);
+  let obj = JSON.parse(await res.text());
+  //check our objects are there.
+  expect(obj).toContain("text");
+  expect(obj).toContain("text2");
+  //TODO: parsing of json
+});
+
+test('Routes should care about method', async () => {
+  let req = new Request(
+    'https://cryptoserviceworker.com/api/ping', {
+      method: 'POST',
+    }
+  );
+  let router = new Router();
+  let res = await router.handle(req);
+  expect(res).not.toBeNull();
+  expect(res.status).toEqual(405); //not allowed
+});
 
 // test('bad requests are 400', () => {
 //   let badUrls = [
@@ -119,20 +150,7 @@ test('Ping', async () => {
 //   expect(reqCtx.provider).toEqual('gdax');
 // });
 
-test('fastest wins', async () => {
-  let responders = [
-    new DelayedResponder(10, 'fast'),
-    new DelayedResponder(100, 'slow'),
-  ];
-  
-  let request = new Request(
-    'https://cryptoserviceworker.com/api/gdax/spot/btc-usd'
-  );
-  let req = new RequestContextBase(request);
-  let res = await racer.race(req, responders);
-  console.log(`winner: ${res.body}`);
-  expect(res.body).toEqual('fast');
-});
+
 
 // test('INT: gdax spot', async () => {
 //   let gdax = new GdaxSpotProvider();
