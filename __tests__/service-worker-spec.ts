@@ -91,6 +91,13 @@ test('All returns all', async() => {
   //TODO: parsing of json
 });
 
+async function handleRequest(url: string): Promise<Response> {
+  let req = new Request(url);
+  let router = new Router();
+  let res = await router.handle(req);
+  return res;
+}
+
 test('Routes should care about method', async () => {
   let req = new Request(
     'https://cryptoserviceworker.com/api/ping', {
@@ -104,11 +111,7 @@ test('Routes should care about method', async () => {
 });
 
 test('INT: gdax spot', async () => {
-  let req = new Request(
-    'https://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd'
-  );
-  let router = new Router();
-  let res = await router.handle(req);
+  let res = await handleRequest('https://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd');
   expect(res).not.toBeNull();
   expect(res.body).not.toBeNull();
   console.log(res.body);
@@ -118,11 +121,7 @@ test('INT: gdax spot', async () => {
 });
 
 test('INT: bitfinex spot', async () => {
-  let req = new Request(
-    'https://cryptoserviceworker.com/api/direct/bitfinex/spot/btc-usd'
-  );
-  let router = new Router();
-  let res = await router.handle(req);
+  let res = await handleRequest('https://cryptoserviceworker.com/api/direct/bitfinex/spot/btc-usd');
   expect(res).not.toBeNull();
   expect(res.body).not.toBeNull();
   console.log(res.body);
@@ -133,29 +132,24 @@ test('INT: bitfinex spot', async () => {
 
 
 test('INT: fastest spot', async () => {
-  let req = new Request(
-    'https://cryptoserviceworker.com/api/race/spot/btc-usd'
-  );
-  let router = new Router();
-  let res = await router.handle(req);
-  console.log('INT: fastest');
+  let res = await handleRequest('https://cryptoserviceworker.com/api/race/spot/btc-usd');
+  console.log('INT: race');
   console.log(res.body);
   let spot: SpotPrice = await res.json();
   console.log(`${JSON.stringify(spot)}`);
   expect(spot.symbol).toEqual('btc-usd');
 });
 
-// test('INT: aggregate spot', async () => {
-//   let req = new Request('https://cryptoserviceworker.com/api/all/spot/btc-usd');
-//   let handler = new RequestHandler();
-//   let res = await handler.handle(req);
-//   console.log('INT: all');
-//   let result = await res.json();
-//   console.log(JSON.stringify(result));
-//   //Check for multiple results
-//   expect(result["gdax"].symbol).toEqual("btc-usd")
-//   expect(result["bitfinex"].symbol).toEqual("btc-usd");
-// });
+test('INT: aggregate spot', async () => {
+  let res = await handleRequest('https://cryptoserviceworker.com/api/all/spot/btc-usd');
+  console.log('INT: all');
+  let result = await res.json();
+  console.log(result);
+  //Check for multiple results
+  //TODO: the results come back as an array of strings...
+  expect(JSON.parse(result[0]).symbol).toEqual("btc-usd");
+  expect(JSON.parse(result[1]).symbol).toEqual("btc-usd");
+});
 
 // test('bad requests are 400', () => {
 //   let badUrls = [
@@ -175,42 +169,3 @@ test('INT: fastest spot', async () => {
 //     expect(res.status).toEqual(400);
 //   }
 // });
-
-// test('good requests do not trigger validation errors', () => {
-//   let goodUrls = [
-//     'https://cryptoserviceworker.com/api/race/spot/btc-usd',
-//     'https://cryptoserviceworker.com/api/all/spot/btc-usd',
-//     'https://cryptoserviceworker.com/api/gdax/spot/btc-usd',
-//     'https://cryptoserviceworker.com/api/race/spot/ltc-aud',
-//   ];
-
-//   let badRequests = goodUrls.map(url => new Request(url, { method: 'GET' }));
-//   let parser = new RequestParser();
-//   for (let badReq of badRequests) {
-//     console.log("Trying: " + badReq.url);
-//     let res = parser.validate(badReq);
-//     expect(res).toBeNull();
-//   }
-// });
-
-// test('parse action requests', () => {
-//   let url = 'https://cryptoserviceworker.com/api/race/spot/btc-usd';
-//   let parser = new RequestParser();
-//   let reqCtx = parser.parse(new Request(url, { method: 'GET' }));
-//   expect(reqCtx.action).toEqual('race');
-//   expect(reqCtx.provider).toEqual('');
-// });
-
-// test('parse provider requests', () => {
-//   let url = 'https://cryptoserviceworker.com/api/gdax/spot/btc-usd';
-//   let parser = new RequestParser();
-//   let reqCtx = parser.parse(new Request(url, { method: 'GET' }));
-//   expect(reqCtx.action).toEqual('');
-//   expect(reqCtx.provider).toEqual('gdax');
-// });
-
-
-
-
-
-
