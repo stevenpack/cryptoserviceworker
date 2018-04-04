@@ -131,6 +131,32 @@ test('INT: bitfinex spot', async () => {
   expect(spot.symbol).toEqual('btc-usd');
 });
 
+
+test('INT: fastest spot', async () => {
+  let req = new Request(
+    'https://cryptoserviceworker.com/api/race/spot/btc-usd'
+  );
+  let router = new Router();
+  let res = await router.handle(req);
+  console.log('INT: fastest');
+  console.log(res.body);
+  let spot: SpotPrice = await res.json();
+  console.log(`${JSON.stringify(spot)}`);
+  expect(spot.symbol).toEqual('btc-usd');
+});
+
+// test('INT: aggregate spot', async () => {
+//   let req = new Request('https://cryptoserviceworker.com/api/all/spot/btc-usd');
+//   let handler = new RequestHandler();
+//   let res = await handler.handle(req);
+//   console.log('INT: all');
+//   let result = await res.json();
+//   console.log(JSON.stringify(result));
+//   //Check for multiple results
+//   expect(result["gdax"].symbol).toEqual("btc-usd")
+//   expect(result["bitfinex"].symbol).toEqual("btc-usd");
+// });
+
 // test('bad requests are 400', () => {
 //   let badUrls = [
 //     'https://cryptoserviceworker.com/apiXX/race/spot/btc-usd',
@@ -188,28 +214,3 @@ test('INT: bitfinex spot', async () => {
 
 
 
-// test('INT: fastest spot', async () => {
-//   let req = new Request(
-//     'https://cryptoserviceworker.com/api/race/spot/btc-usd'
-//   );
-//   let handler = new RequestHandler();
-//   let res = await handler.handle(req);
-//   console.log('INT: fastest');
-//   console.log(res.body);
-// });
-
-// test('INT: aggregate spot', async () => {
-//   let req = new Request('https://cryptoserviceworker.com/api/all/spot/btc-usd');
-//   let handler = new RequestHandler();
-//   let res = await handler.handle(req);
-//   console.log('INT: all');
-//   let result = await res.json();
-//   console.log(JSON.stringify(result));
-//   //Check for multiple results
-//   expect(result["gdax"].symbol).toEqual("btc-usd")
-//   expect(result["bitfinex"].symbol).toEqual("btc-usd");
-// });
-
-// test('500 returns error info in debug mode', async() => {
-//   expect(false).toBeTruthy("If debug is on, we want the error info");
-// });

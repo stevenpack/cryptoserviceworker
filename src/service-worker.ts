@@ -158,6 +158,21 @@ export class MethodNotAllowedHandler implements IRouteHandler {
 }
 
 //==== API ====//
+
+export class HandlerFactory {
+  constructor(private providerHandlers: IRouteHandler[] = []) {
+    this.providerHandlers.push(
+      new GdaxSpotHandler(),
+      new BitfinexSpotHandler()
+    )
+  }
+
+  public getProviderHandlers(): IRouteHandler[] {
+    return this.providerHandlers;
+  }
+
+}
+
 export class PingRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
     if (req.request.method !== "GET") {
@@ -189,7 +204,6 @@ export class RaceRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
     let url = new URL(req.request.url);
     if (url.pathname.startsWith("/api/race/")) {
-      //TODO: configure it. Here?
       return new RacerHandler()
     }
     return null;
@@ -198,10 +212,13 @@ export class RaceRoute implements IRoute {
 
 export class RacerHandler implements IRouteHandler {
 
-  constructor(private responders: IRouteHandler[] = []) {}
+  constructor(private handlers: IRouteHandler[] = []) {    
+    let factory = new HandlerFactory();
+    this.handlers = factory.getProviderHandlers();
+  }
 
   handle(req: RequestContextBase): Promise<Response> {
-    return this.race(req, this.responders);
+    return this.race(req, this.handlers);
   }
 
   async race(req: RequestContextBase, responders: IRouteHandler[]): Promise<Response> {
@@ -214,7 +231,6 @@ export class AllRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
     
     if (req.url.pathname.startsWith("/api/all/")) {
-      //TODO: configure. here?
       return new AllHandler();
     }
     return null;
@@ -222,7 +238,10 @@ export class AllRoute implements IRoute {
 }
 
 export class AllHandler implements IRouteHandler {
-  constructor(private handlers: IRouteHandler[] = []) {}
+  constructor(private handlers: IRouteHandler[] = []) {
+    let factory = new HandlerFactory();
+    this.handlers = factory.getProviderHandlers();
+  }
 
   handle(req: RequestContextBase): Promise<Response> {    
     return this.all(req, this.handlers);
@@ -240,6 +259,7 @@ export class DirectRoute implements IRoute {
     if (req.url.pathname.startsWith("/api/direct")) {
       console.log("Direct...")
       //Split and filter any empty
+      // /api/direct/gdax/btc-spot
       let parts = req.url.pathname.split("/").filter(val => val);
       console.log(parts);
       if (parts.length > 2) {
@@ -247,7 +267,7 @@ export class DirectRoute implements IRoute {
         switch (provider) {
           case "gdax":
             return new GdaxSpotHandler();
-          case "bitfinex"
+          case "bitfinex":
             return new BitfinexSpotHandler();
           default:          
             return new NotFoundHandler();
@@ -297,11 +317,11 @@ export class DirectParser {
   public parse(url: URL): {type: string, symbol: Symbol} {
     
     let parts = url.pathname
-      .replace("/api/direct/", "") //strip the part we know
-      .split("/") //split
+      .replace(new RegExp("\/api\/(direct|race|all)[\/(gdax|bitfinex)]+"), "") //strip the part we know
+      .split("/") //so left with /spot/btc-usd. split
       .filter(val => val) //filter any empty
       console.log(parts);
-      return {type: parts[1], symbol: Symbol.fromString(parts[2])};
+      return {type: parts[0], symbol: Symbol.fromString(parts[1])};
   }
 }
 
@@ -404,123 +424,6 @@ export class BitfinexSymbolFormatter implements ISymbolFormatter {
     return `${symbol.base}${symbol.target}`;
   }
 }
-
-// /**
-//  * /api/race/spot/btc-usd
-//  * /api/aggregate/spot/btc-usd
-//  * /api/gdax/spot/btc-usd
-//  */
-// export class RequestParser {
-//   private types: string[];
-//   private providers: string[];
-//   private actions: string[];
-
-//   constructor() {
-//     this.actions = ['race', 'all', 'ping'];
-//     this.providers = ['gdax', 'bitfinex'];
-//     this.types = ['spot'];
-//   }
-
-//   public parse(req: Request): RequestContext {
-//     let parts = req.url.split('/');
-//     let firstOrDefault = (arr: string[], item: string): string => {
-//       let index = arr.findIndex(x => x === item);
-//       return index > -1 ? arr[index] : '';
-//     };
-
-//     //One or the other (action OR provider could be 5th e.g. /api/race or api/gdax/);
-//     let action: string = firstOrDefault(this.actions, parts[4]);
-//     let provider: string = firstOrDefault(this.providers, parts[4]);
-
-//     //TODO: The request context and validation should be specific to the route
-//     if (action === 'ping') {
-//       console.log("Returning request context...");
-//       return new RequestContext(req, null, action, '');
-//     }
-
-//     let type = parts[5];
-//     let symbol = Symbol.fromString(parts[6]);
-//     return new RequestContext(req, symbol, action, type, provider);
-//   }
-
-//   public validate(req: Request) {
-//     if (req.method.toUpperCase() !== 'GET') {
-//       return new Response('', {
-//         status: 405,
-//         statusText: 'GET only supported',
-//       });
-//     }
-//     const help =
-//       'The API request should be of the form https://cryptoserviceworker.com/api/[ping]/[race]|[all]|[provider]/spot/<base>|<target> for example, https://cryptoserviceworker.com/api/race/btc-usd or https://cryptoserviceworker.com/api/gdax/btc-usd';
-
-//     try {
-//       let parts = req.url.split('/');
-//       //0 'https:',
-//       //1   '',
-//       //2   'cryptoserviceworker.com',
-//       //3   'api',
-//       //4   'race',
-//       //5   'spot',
-//       //6   'btc-usd'
-
-//       if (parts === null || parts.length === 0) {
-//         return this.badRequest(help);
-//       }
-
-//       if (parts[3] !== 'api') {
-//         return this.badRequest(help);
-//       }
-
-//       //Ping
-//       if (parts[4] === 'ping') {
-//         console.log('validating as OK...');
-//         return null;
-//       }
-
-//       if (parts.length !== 7) {
-//         return this.badRequest(help);
-//       }
-//       if (
-//         this.actions.indexOf(parts[4]) == -1 &&
-//         this.providers.indexOf(parts[4]) == -1
-//       ) {
-//         return this.badRequest(help);
-//       }
-//       if (this.types.indexOf(parts[5]) == -1) {
-//         return this.badRequest(help);
-//       }
-//       let isNullOrEmpty = (value: string) => {
-//         return !value || value == undefined || value == '' || value.length == 0;
-//       };
-
-//       let symbol = parts[6];
-//       let symbolParts = parts[6].split('-');
-//       if (
-//         symbolParts.length !== 2 || //2 parts, base and target
-//         isNullOrEmpty(symbolParts[0]) ||
-//         isNullOrEmpty(symbolParts[1])
-//       ) {
-//         //base and target
-//         return this.badRequest(help);
-//       }
-//     } catch (e) {
-//       //TOOD: debug header if enabled.
-//       return this.badRequest(help);
-//     }
-//     return null;
-//   }
-
-//   private badRequest(statusText: string): Response {
-//     return new Response('', {
-//       status: 400,
-//       statusText: statusText,
-//     });
-//   }
-// }
-
-
-
-
 
 // addEventListener('fetch', event => {
 //   event.respondWith(fetchAndLog(event.request))
