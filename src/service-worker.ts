@@ -1,3 +1,4 @@
+//mock the methods and objects that will be available in the browser
 import fetch from 'node-fetch';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
@@ -10,32 +11,27 @@ export interface IRouter {
 }
 
 /**
- * A route
+ * A route.
  * 
- * TODO: perf: Big object just for matching. Only 1 will be used.
- *       could be match and just a factory method.
+ * Used to match an /api call to a IRouteHandler
  */
 export interface IRoute {
   match(req: RequestContextBase): IRouteHandler | null;
 }
 
+/**
+ * Handles a request.
+ */
 export interface IRouteHandler {
     handle(req: RequestContextBase): Promise<Response>;
 }
 
-export interface IInterceptor {
-  process(req: RequestContextBase, res: Response): void;
-}
-
 /**
- * Interfce for adding log information to requests and responses
+ * Intercepts requests before handlers and responses after handlers
  */
-export interface ILogDecorator {
-  intercept(req: ILogger, res: ILogger) : Response;
-}
-
-export interface ILogInjector {
-  inject(log: string, res: Response): void;
+export interface IInterceptor {
+  preProcess(req: RequestContextBase, res: Response | null): Response | null;
+  postProcess(req: RequestContextBase, res: Response): Response | null;
 }
 
 export interface ILogger {
@@ -85,10 +81,35 @@ export class Router implements IRouter {
 
   async handle(request: Request): Promise<Response> {
     let req = new RequestContextBase(request);
+    let res = this.preProcess(req);
+    if (res) {
+      return res;
+    }
     let handler = this.route(req);
-    let res = await handler.handle(req);
-    this.interceptors.forEach(i => i.process(req, res));
+    res = await handler.handle(req);
+    res = this.postProcess(req, res)
     return res;
+  }
+
+  /**
+   * Run the interceptors and return their response if provided, or the original
+   * @param req 
+   * @param res 
+   */
+  private preProcess(req: RequestContextBase): Response | null {
+    let preProcessResponse = null;
+    for (let interceptor of this.interceptors) {
+      preProcessResponse = interceptor.preProcess(req, preProcessResponse);
+    }
+    return preProcessResponse;
+  }
+
+  private postProcess(req: RequestContextBase, res: Response): Response {
+    let postProcessResponse = null;
+    for (let interceptor of this.interceptors) {
+      postProcessResponse = interceptor.postProcess(req, postProcessResponse || res);
+    }
+    return postProcessResponse || res;
   }
 
   route(req: RequestContextBase): IRouteHandler {
@@ -110,18 +131,134 @@ export class Router implements IRouter {
   }
 }
 
-export class LogInterceptor implements IInterceptor {
-  process(req: RequestContextBase, res: Response): void {
+//=== Interceptors ===
 
+export class LogInterceptor implements IInterceptor {
+  
+  preProcess(req: RequestContextBase, res: Response): Response {    
+    return res;
+  }
+  
+  postProcess(req: RequestContextBase, res: Response): Response {
     if (req.url.searchParams.get("debug") !== "true") {
-      return;
+      return res;
     }
     req.log("Executing log interceptor");
     let logStr = encodeURIComponent(req.getLines().join("\n"));
     this.inject(logStr, res); 
+    return res;
   }
+
   inject(log: string, res: Response): void {
     res.headers.append("X-DEBUG", log);
+  }
+}
+
+export class CacheInterceptor implements IInterceptor {
+
+  cache: WindowCache;
+  constructor() {
+    this.cache = new WindowCache(window);
+  }
+
+  preProcess(req: RequestContextBase, res: Response): Response | null {    
+    //if the cache header or query param is there, use cache
+    let maxAgeMs = this.getMaxAgeMs(req);
+    if (maxAgeMs > 0) {
+      //use cache if not expired
+      let entry = this.cache.tryGetEntry<Response>(req.url.pathname, maxAgeMs);
+      if (entry == null) {
+        //expired
+        return res;
+      }
+      //use the cached version      
+      res = entry.item;
+      res.headers.set("Age", entry.ageSecs().toString())
+    }  
+    return res;
+  }
+  postProcess(req: RequestContextBase, res: Response): Response {
+    //Cache responses by path name
+    //TODO: don't cache cache endpoints! ...won't get here anyway?
+    this.cache.setEntry<Response>(req.url.pathname, new CacheEntry<Response>(res));
+    return res;
+  }
+
+  private getMaxAgeMs(req: RequestContextBase): number {
+    let maxAgeParam = req.url.searchParams.get("maxAge");
+    if (maxAgeParam) {
+      try {
+        let maxAgeSecs = parseInt(maxAgeParam);
+        return maxAgeSecs * 1000;
+      } catch (e) {
+        //TODO: bad request
+        return -1;
+      }
+    }
+    let maxAgeHeader = req.request.headers.get("Cache-Control");
+    if (maxAgeHeader) {
+      let maxAgeValue = maxAgeHeader.replace("max-age=", "");
+      try {
+        let maxAgeSecs = parseInt(maxAgeValue);
+        return maxAgeSecs * 1000;
+      } catch (e) {
+        //TODO: bad request
+        return -1
+      }
+    }
+    return -1;
+  }
+}
+
+/**
+ * Cache backed by global window variable.
+ * 
+ * Can die at any time
+ * Doesn't offer any purging
+ */
+export class WindowCache {
+  
+  window: any;
+  constructor(window: any) {    
+    //TODO: include logging about whether the cache existed (or if we were destroyed in between invocations)
+    this.window = window || {};
+    this.window.cache = {};    
+  }
+
+  public tryGetEntry<T>(key: string, maxAgeMs: number): CacheEntry<T> | null {
+    let entry = this.getEntry<T>(key);
+    if (!entry) {
+      return null; //not in cache
+    }
+    if (entry.ageMs() >= maxAgeMs) {
+      return null; // expired
+    }
+    return entry; //fresh
+  }
+
+  public getEntry<T>(key: string): CacheEntry<T> | null {
+    return this.window.cache[key];
+  }
+
+  public setEntry<T>(key: string, entry: CacheEntry<T>) {
+    this.window.cache[key] = entry;
+  }
+}
+
+export class CacheEntry<T> {
+  
+  public cachedAtUtc: number;
+  
+  constructor(public item: T) {
+    this.cachedAtUtc = Date.now();
+  }
+
+  public ageMs(): number {
+    return Date.now() - this.cachedAtUtc;
+  }
+
+  public ageSecs() : number {
+    return Math.round(this.ageMs() / 1000);
   }
 }
 
@@ -170,7 +307,6 @@ export class HandlerFactory {
   public getProviderHandlers(): IRouteHandler[] {
     return this.providerHandlers;
   }
-
 }
 
 export class PingRoute implements IRoute {
@@ -211,7 +347,6 @@ export class RaceRoute implements IRoute {
 }
 
 export class RacerHandler implements IRouteHandler {
-
   constructor(private handlers: IRouteHandler[] = []) {    
     let factory = new HandlerFactory();
     this.handlers = factory.getProviderHandlers();
@@ -228,8 +363,7 @@ export class RacerHandler implements IRouteHandler {
 }
 
 export class AllRoute implements IRoute {
-  match(req: RequestContextBase): IRouteHandler | null {
-    
+  match(req: RequestContextBase): IRouteHandler | null {    
     if (req.url.pathname.startsWith("/api/all/")) {
       return new AllHandler();
     }

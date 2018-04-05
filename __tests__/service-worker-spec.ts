@@ -4,7 +4,9 @@ import {
   RacerHandler,
   RequestContextBase,
   AllHandler,
-  SpotPrice
+  SpotPrice,
+  WindowCache,
+  CacheEntry
 //   GdaxSpotProvider,
 //   SpotPrice,
 //   BitfinexSpotProvider,
@@ -149,6 +151,29 @@ test('INT: aggregate spot', async () => {
   //TODO: the results come back as an array of strings...
   expect(JSON.parse(result[0]).symbol).toEqual("btc-usd");
   expect(JSON.parse(result[1]).symbol).toEqual("btc-usd");
+});
+
+test('cache set and get', () => {
+  let cache = new WindowCache({});
+  let res = new Response("test");
+  let item = new CacheEntry(res);  
+  cache.setEntry("a", item);
+  let cachedItem = cache.getEntry<Response>("a");
+  expect(cachedItem.item.body).toEqual("test");
+});
+
+test('cache get with max-age', async () => {
+  let cache = new WindowCache({});
+  let res = new Response("test");
+  let item = new CacheEntry(res);  
+  cache.setEntry("a", item);
+  let cachedItem = cache.tryGetEntry<Response>("a", 50);
+  expect(cachedItem).not.toBeNull(); //should still be there 
+  setTimeout(() => {
+    let expiredCachedItem = cache.tryGetEntry<Response>("a", 50);
+    console.log("Tried to get item with 50ms expiry after 100ms. Got: " + expiredCachedItem);
+    expect(expiredCachedItem).toBeNull(); //should have expired after 100ms
+  }, 100);
 });
 
 // test('bad requests are 400', () => {
