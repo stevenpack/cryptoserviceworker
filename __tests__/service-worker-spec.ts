@@ -5,6 +5,7 @@ import {
   RequestContextBase,
   AllHandler,
   SpotPrice,
+<<<<<<< HEAD
   //   GdaxSpotProvider,
   //   SpotPrice,
   //   BitfinexSpotProvider,
@@ -12,6 +13,10 @@ import {
   //   RequestContext,
   //   ResponseContext,
   //   RequestHandler,
+=======
+  WindowCache,
+  CacheEntry
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
 } from '../src/service-worker';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
@@ -36,6 +41,7 @@ async function pingApi(queryParams: string = ''): Promise<Response> {
   return await handler.handle(req);
 }
 
+<<<<<<< HEAD
 test('Log header present on request', async () => {
   let res = await pingApi('?debug=true');
   expect(res.headers.has('X-DEBUG')).toBeTruthy();
@@ -94,12 +100,23 @@ test('All returns all', async () => {
 });
 
 async function handleRequest(url: string): Promise<Response> {
+=======
+async function handleRequest(url: string, debug: boolean = true): Promise<Response> {
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
   let req = new Request(url);
+  if (debug) {
+    console.log("requesting X-DEBUG=true")
+    req.headers.append("X-DEBUG", "true");
+  }
   let router = new Router();
   let res = await router.handle(req);
+  const debugStr = res.headers.get('X-DEBUG');
+  console.log("X-Debug Decoded:");
+  console.log(decodeURIComponent(debugStr));
   return res;
 }
 
+<<<<<<< HEAD
 test('Routes should care about method', async () => {
   let req = new Request('https://cryptoserviceworker.com/api/ping', {
     method: 'POST',
@@ -157,6 +174,166 @@ test('INT: aggregate spot', async () => {
   expect(JSON.parse(result[0]).symbol).toEqual('btc-usd');
   expect(JSON.parse(result[1]).symbol).toEqual('btc-usd');
 });
+=======
+describe('unit', () => {
+  test('Log header present on request', async () => {
+    let res = await pingApi("?debug=true");
+    expect(res.headers.has('X-DEBUG')).toBeTruthy();
+    const debug = res.headers.get('X-DEBUG');
+    console.log("X-Debug Decoded:");
+    console.log(decodeURIComponent(debug));
+    expect(debug.length).toBeGreaterThan(0);
+  });
+  
+  test('Log header absent by default ', async () => {
+    let res = await pingApi("?debug=xxx");
+    expect(res.headers.has('X-DEBUG')).toBeFalsy();
+  });
+  
+  
+  test('Ping', async () => {
+    let res = await pingApi();
+    let result = await res.body;
+    console.log(JSON.stringify(result));
+    expect(res.status).toEqual(200);
+  });
+  
+  test('Fastest wins', async () => {
+    let responders = [
+      new DelayedResponder(10, 'fast'),
+      new DelayedResponder(100, 'slow'),
+    ];
+    
+    let request = new Request(
+      'https://cryptoserviceworker.com/api/gdax/spot/btc-usd'
+    );
+    let req = new RequestContextBase(request);
+    
+    const racer = new RacerHandler();
+    let res = await racer.race(req, responders);
+    console.log(`winner: ${res.body}`);
+    expect(res.body).toEqual('fast');
+  });
+  
+  test('All returns all', async() => {
+    let responders = [
+      new DelayedResponder(50, "text"),
+      new DelayedResponder(75, "text2"),    
+      new DelayedResponder(100, "{\"strongly\": \"typed\"}"),
+      new DelayedResponder(100, "{\"very_strongly\": \"typed2\"}")    
+    ];
+    let req = RequestContextBase.fromString("http://cryptoserviceworker.com/api/all/spot/btc-usd");
+    let aggregator = new AllHandler();
+    let res = await aggregator.all(req, responders);
+    let obj = JSON.parse(await res.text());
+    //check our objects are there.
+    expect(obj).toContain("text");
+    expect(obj).toContain("text2");
+    //TODO: parsing of json
+  });
+  
+  test('Routes should care about method', async () => {
+    let req = new Request(
+      'https://cryptoserviceworker.com/api/ping', {
+        method: 'POST',
+      }
+    );
+    let router = new Router();
+    let res = await router.handle(req);
+    expect(res).not.toBeNull();
+    expect(res.status).toEqual(405); //not allowed
+  });
+
+    
+  test('cache get with max-age', async () => {
+    let cache = new WindowCache();
+    let res = new Response("test");
+    let item = new CacheEntry(res);  
+    cache.setEntry("a", item);
+    let cachedItem = cache.tryGetEntry<Response>("a", 50);
+    expect(cachedItem).not.toBeNull(); //should still be there 
+    setTimeout(() => {
+      let expiredCachedItem = cache.tryGetEntry<Response>("a", 50);
+      console.log("Tried to get item with 50ms expiry after 100ms. Got: " + expiredCachedItem);
+      expect(expiredCachedItem).toBeNull(); //should have expired after 100ms
+    }, 100);
+  });
+
+  test('cache set and get', () => {
+    let cache = new WindowCache();
+    let res = new Response("test");
+    let item = new CacheEntry(res);  
+    cache.setEntry("a", item);
+    let cachedItem = cache.getEntry<Response>("a");
+    expect(cachedItem.item.body).toEqual("test");
+  });
+});
+
+describe('integration', () => {
+  test('INT: gdax spot', async () => {
+    let res = await handleRequest('https://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd');
+    expect(res).not.toBeNull();
+    expect(res.body).not.toBeNull();
+    console.log(res.body);
+    let spot: SpotPrice = await res.json();
+    console.log(`${JSON.stringify(spot)}`);
+    expect(spot.symbol).toEqual('btc-usd');
+  });
+  
+  test('INT: bitfinex spot', async () => {
+    let res = await handleRequest('https://cryptoserviceworker.com/api/direct/bitfinex/spot/btc-usd');
+    expect(res).not.toBeNull();
+    expect(res.body).not.toBeNull();
+    console.log(res.body);
+    let spot: SpotPrice = await res.json();
+    console.log(`${JSON.stringify(spot)}`);
+    expect(spot.symbol).toEqual('btc-usd');
+  });
+  
+  
+  test('INT: fastest spot', async () => {
+    let res = await handleRequest('https://cryptoserviceworker.com/api/race/spot/btc-usd');
+    console.log('INT: race');
+    console.log(res.body);
+    let spot: SpotPrice = await res.json();
+    console.log(`${JSON.stringify(spot)}`);
+    expect(spot.symbol).toEqual('btc-usd');
+  });
+  
+  test('INT: aggregate spot', async () => {
+    let res = await handleRequest('https://cryptoserviceworker.com/api/all/spot/btc-usd');
+    console.log('INT: all');
+    let result = await res.json();
+    console.log(result);
+    //Check for multiple results
+    //TODO: the results come back as an array of strings...
+    expect(JSON.parse(result[0]).symbol).toEqual("btc-usd");
+    expect(JSON.parse(result[1]).symbol).toEqual("btc-usd");
+  });
+  
+
+
+  
+  test('INT: get with cache', async () => {
+    //get, expect no cache
+    let res = await handleRequest("http://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd?max-age=60");
+    expect(res).not.toBeNull();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Age")).toBeNull();
+  
+    //get again, expect cache (and be faster!)
+    res = await handleRequest("http://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd?max-age=60");
+    expect(res).not.toBeNull();
+    expect(res.status).toBe(200);
+    let age = res.headers.get("Age");
+    console.log(`age: ${age}`);
+    expect(age).not.toBeNull();
+  
+  })
+});
+
+
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
 
 // test('bad requests are 400', () => {
 //   let badUrls = [

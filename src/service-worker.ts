@@ -1,7 +1,21 @@
+//mock the methods and objects that will be available in the browser
+// --BEGIN COMMENT--
 import fetch from 'node-fetch';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 import { URL } from 'url';
+const window = {};
+// --END COMMENT--
+// --BEGIN UNCOMMENT--
+// addEventListener('fetch', event => {
+//   event.respondWith(fetchAndLog(event.request))
+// })
+
+// async function fetchAndLog(request) {
+//   let router = new exports.Router();
+//   return router.handle(request);
+// }
+// --END UNCOMMENT--
 
 //==== Framework ====//
 
@@ -10,26 +24,32 @@ export interface IRouter {
 }
 
 /**
+<<<<<<< HEAD
  * A route
  *
  * TODO: perf: Big object just for matching. Only 1 will be used.
  *       could be match and just a factory method.
+=======
+ * A route.
+ * 
+ * Used to match an /api call to a IRouteHandler
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
  */
 export interface IRoute {
   match(req: RequestContextBase): IRouteHandler | null;
 }
 
+/**
+ * Handles a request.
+ */
 export interface IRouteHandler {
   handle(req: RequestContextBase): Promise<Response>;
 }
 
-export interface IInterceptor {
-  process(req: RequestContextBase, res: Response): void;
-}
-
 /**
- * Interfce for adding log information to requests and responses
+ * Intercepts requests before handlers and responses after handlers
  */
+<<<<<<< HEAD
 export interface ILogDecorator {
   intercept(req: ILogger, res: ILogger): Response;
 }
@@ -41,13 +61,31 @@ export interface ILogInjector {
 export interface ILogger {
   log(logLine: string): void;
   getLines(): string[];
+=======
+export interface IInterceptor {
+  preProcess(req: RequestContextBase, res: Response | null): Response | null;
+  postProcess(req: RequestContextBase, res: Response): Response | null;
+}
+
+export interface ILogger {
+  debug(logLine: string): void;
+  info(logLine: string): void;
+  warn(logLine: string): void;
+  error(logLine: string): void;
+  getLines() : string[];
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
 }
 
 /**
- * Request with logging added
+ * Request with additional convenience properties
  */
+<<<<<<< HEAD
 export class RequestContextBase implements ILogger {
   public logLines: string[] = [];
+=======
+export class RequestContextBase{ 
+
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
   public url: URL;
   constructor(public request: Request) {
     this.url = new URL(request.url);
@@ -56,8 +94,24 @@ export class RequestContextBase implements ILogger {
   public static fromString(str: string) {
     return new RequestContextBase(new Request(str));
   }
+}
 
-  log(logLine: string): void {
+export class Logger implements ILogger {
+  debug(logLine: string): void {
+    this.log(`DEBUG: ${logLine}`);
+  }
+  info(logLine: string): void {
+    this.log(`INFO: ${logLine}`);
+  }
+  warn(logLine: string): void {
+    this.log(`WARN: ${logLine}`);
+  }
+  error(logLine: string): void {
+    this.log(`ERROR: ${logLine}`);
+  }
+  public logLines: string[] = [];
+
+  private log(logLine: string): void {
     console.log(logLine);
     this.logLines.push(logLine);
   }
@@ -65,6 +119,9 @@ export class RequestContextBase implements ILogger {
     return this.logLines;
   }
 }
+
+//Check is in scope like this in worker, or needs to be on window.
+const logger = new Logger();
 
 export class Router implements IRouter {
   routes: IRoute[];
@@ -78,21 +135,49 @@ export class Router implements IRouter {
       new AllRoute(),
       new DirectRoute(),
     ];
+<<<<<<< HEAD
     this.interceptors = [new LogInterceptor()];
+=======
+    this.interceptors = [new LogInterceptor, new CacheInterceptor];
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
   }
 
-  async handle(request: Request): Promise<Response> {
+  public async handle(request: Request): Promise<Response> {
     let req = new RequestContextBase(request);
-    let handler = this.route(req);
-    let res = await handler.handle(req);
-    this.interceptors.forEach(i => i.process(req, res));
+    let res = this.preProcess(req);
+    if (!res) {
+      let handler = this.route(req);
+      res = await handler.handle(req);
+    }    
+    res = this.postProcess(req, res)
     return res;
+  }
+
+  /**
+   * Run the interceptors and return their response if provided, or the original
+   * @param req 
+   * @param res 
+   */
+  private preProcess(req: RequestContextBase): Response | null {
+    let preProcessResponse = null;
+    for (let interceptor of this.interceptors) {
+      preProcessResponse = interceptor.preProcess(req, preProcessResponse);
+    }
+    return preProcessResponse;
+  }
+
+  private postProcess(req: RequestContextBase, res: Response): Response {
+    let postProcessResponse = null;
+    for (let interceptor of this.interceptors) {
+      postProcessResponse = interceptor.postProcess(req, postProcessResponse || res);
+    }
+    return postProcessResponse || res;
   }
 
   route(req: RequestContextBase): IRouteHandler {
     let handler: IRouteHandler | null = this.match(req);
     if (handler) {
-      req.log(`Found handler for ${req.url.pathname}`);
+      logger.debug(`Found handler for ${req.url.pathname}`);
       return handler;
     }
     return new NotFoundHandler();
@@ -107,6 +192,7 @@ export class Router implements IRouter {
   }
 }
 
+<<<<<<< HEAD
 export class LogInterceptor implements IInterceptor {
   process(req: RequestContextBase, res: Response): void {
     if (req.url.searchParams.get('debug') !== 'true') {
@@ -115,9 +201,150 @@ export class LogInterceptor implements IInterceptor {
     req.log('Executing log interceptor');
     let logStr = encodeURIComponent(req.getLines().join('\n'));
     this.inject(logStr, res);
+=======
+//=== Interceptors ===
+
+export class LogInterceptor implements IInterceptor {
+  
+  preProcess(req: RequestContextBase, res: Response): Response {    
+    return res;
   }
+  
+  postProcess(req: RequestContextBase, res: Response): Response {
+    logger.debug("Evaluating request for log request")
+    if (req.url.searchParams.get("debug") !== "true" && req.request.headers.get("X-DEBUG") !== "true") {
+      return res;
+    }
+    logger.info("Executing log interceptor");
+    let logStr = encodeURIComponent(logger.getLines().join("\n"));
+    this.inject(logStr, res); 
+    return res;
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
+  }
+
   inject(log: string, res: Response): void {
     res.headers.append('X-DEBUG', log);
+  }
+}
+
+export class CacheInterceptor implements IInterceptor {
+
+  cache: WindowCache;
+  constructor() {
+    this.cache = new WindowCache(window);
+  }
+
+  preProcess(req: RequestContextBase, res: Response): Response | null {    
+    //if the cache header or query param is there, use cache
+    logger.debug("Evaluating CacheInterceptor...");
+    let maxAgeMs = this.getMaxAgeMs(req);
+    if (maxAgeMs > 0) {
+      logger.info(`maxAgeMs ${maxAgeMs} > 0, checking cache`);
+      //use cache if not expired
+      let entry = this.cache.tryGetEntry<Response>(req.url.pathname, maxAgeMs);
+      if (entry == null) {
+        //expired
+        return res;
+      }
+      //use the cached version      
+      res = entry.item;
+      res.headers.set("Age", entry.ageSecs().toString())
+      //status code?
+    }  
+    return res;
+  }
+  postProcess(req: RequestContextBase, res: Response): Response {
+    //Cache responses by path name
+    //TODO: don't cache cache endpoints! ...won't get here anyway?
+    this.cache.setEntry<Response>(req.url.pathname, new CacheEntry<Response>(res));
+    return res;
+  }
+
+  private getMaxAgeMs(req: RequestContextBase): number {
+    let maxAgeParam = req.url.searchParams.get("max-age");
+    if (maxAgeParam) {
+      try {
+        let maxAgeSecs = parseInt(maxAgeParam);
+        logger.debug(`Got max-age=${maxAgeSecs} from query params`);
+        return maxAgeSecs * 1000;
+      } catch (e) {
+        //TODO: bad request
+        return -1;
+      }
+    }
+    let maxAgeHeader = req.request.headers.get("Cache-Control");
+    if (maxAgeHeader) {
+      let maxAgeValue = maxAgeHeader.replace("max-age=", "");
+      try {
+        let maxAgeSecs = parseInt(maxAgeValue);
+        logger.debug(`Got max-age=${maxAgeSecs} from Cache-Control header`);
+        return maxAgeSecs * 1000;
+      } catch (e) {
+        //TODO: bad request
+        return -1
+      }
+    }
+    return -1;
+  }
+}
+
+/**
+ * Cache backed by global window variable.
+ * 
+ * Can die at any time
+ * Doesn't offer any purging
+ */
+export class WindowCache {
+  
+  window: any;
+  constructor(windowObj: any = null) {    
+    logger.debug(`windowObj=${windowObj}`)
+    logger.debug(`window=${window}`)
+    this.window = windowObj || window || {};
+    if (!window.cache) {
+      logger.info("Recreating cache from scratch");
+      this.window.cache = {};      
+    }    
+  }
+
+  public tryGetEntry<T>(key: string, maxAgeMs: number): CacheEntry<T> | null {
+    let entry = this.getEntry<T>(key);
+    if (!entry) {
+      return null; //not in cache
+    }
+    if (entry.ageMs() >= maxAgeMs) {
+      return null; // expired
+    }
+    return entry; //fresh
+  }
+
+  public getEntry<T>(key: string): CacheEntry<T> | null {
+    logger.debug(`Checking for entry at ${key}`);
+    let entry = this.window.cache[key] as CacheEntry<T>;
+    logger.debug(entry ? `entry.ageMs=${entry.ageMs()}ms` : `Not found`);
+    return entry;
+  }
+
+  public setEntry<T>(key: string, entry: CacheEntry<T>) {
+    logger.info(`Storing entry at ${key}`);
+    this.window.cache[key] = entry;
+  }
+}
+
+export class CacheEntry<T> {
+  
+  public cachedAtUtc: number;
+  
+  constructor(public item: T) {
+    this.cachedAtUtc = Date.now();
+  }
+
+  public ageMs(): number {
+    return Date.now() - this.cachedAtUtc;
+  }
+
+  public ageSecs() : number {
+    return Math.round(this.ageMs() / 1000);
   }
 }
 
@@ -184,7 +411,7 @@ export class PingRouteHandler implements IRouteHandler {
   async handle(req: RequestContextBase): Promise<Response> {
     const pong = 'pong;';
     let res = new Response(pong);
-    req.log(`Responding with ${pong} and ${res.status}`);
+    logger.info(`Responding with ${pong} and ${res.status}`);
     return new Response(pong);
   }
 }
@@ -206,7 +433,11 @@ export class RaceRoute implements IRoute {
 }
 
 export class RacerHandler implements IRouteHandler {
+<<<<<<< HEAD
   constructor(private handlers: IRouteHandler[] = []) {
+=======
+  constructor(private handlers: IRouteHandler[] = []) {    
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
     let factory = new HandlerFactory();
     this.handlers = factory.getProviderHandlers();
   }
@@ -225,8 +456,13 @@ export class RacerHandler implements IRouteHandler {
 }
 
 export class AllRoute implements IRoute {
+<<<<<<< HEAD
   match(req: RequestContextBase): IRouteHandler | null {
     if (req.url.pathname.startsWith('/api/all/')) {
+=======
+  match(req: RequestContextBase): IRouteHandler | null {    
+    if (req.url.pathname.startsWith("/api/all/")) {
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
       return new AllHandler();
     }
     return null;
@@ -419,6 +655,7 @@ export class BitfinexSymbolFormatter implements ISymbolFormatter {
   }
 }
 
+<<<<<<< HEAD
 // var exports = {};
 // addEventListener('fetch', event => {
 //   event.respondWith(fetchAndLog(event.request));
@@ -432,3 +669,5 @@ export class BitfinexSymbolFormatter implements ISymbolFormatter {
 //   let r = new Router();
 //   return r.handle(request);
 // }
+=======
+>>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
