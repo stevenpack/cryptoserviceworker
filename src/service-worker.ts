@@ -6,12 +6,12 @@ import { URL } from 'url';
 //==== Framework ====//
 
 export interface IRouter {
-  route(req: RequestContextBase): IRouteHandler
+  route(req: RequestContextBase): IRouteHandler;
 }
 
 /**
  * A route
- * 
+ *
  * TODO: perf: Big object just for matching. Only 1 will be used.
  *       could be match and just a factory method.
  */
@@ -20,7 +20,7 @@ export interface IRoute {
 }
 
 export interface IRouteHandler {
-    handle(req: RequestContextBase): Promise<Response>;
+  handle(req: RequestContextBase): Promise<Response>;
 }
 
 export interface IInterceptor {
@@ -31,7 +31,7 @@ export interface IInterceptor {
  * Interfce for adding log information to requests and responses
  */
 export interface ILogDecorator {
-  intercept(req: ILogger, res: ILogger) : Response;
+  intercept(req: ILogger, res: ILogger): Response;
 }
 
 export interface ILogInjector {
@@ -40,14 +40,13 @@ export interface ILogInjector {
 
 export interface ILogger {
   log(logLine: string): void;
-  getLines() : string[];
+  getLines(): string[];
 }
 
 /**
  * Request with logging added
  */
-export class RequestContextBase implements ILogger { 
-
+export class RequestContextBase implements ILogger {
   public logLines: string[] = [];
   public url: URL;
   constructor(public request: Request) {
@@ -64,11 +63,10 @@ export class RequestContextBase implements ILogger {
   }
   getLines(): string[] {
     return this.logLines;
-  } 
+  }
 }
 
 export class Router implements IRouter {
-
   routes: IRoute[];
   interceptors: IInterceptor[];
 
@@ -78,9 +76,9 @@ export class Router implements IRouter {
       new PingRoute(),
       new RaceRoute(),
       new AllRoute(),
-      new DirectRoute()
+      new DirectRoute(),
     ];
-    this.interceptors = [new LogInterceptor];
+    this.interceptors = [new LogInterceptor()];
   }
 
   async handle(request: Request): Promise<Response> {
@@ -99,12 +97,11 @@ export class Router implements IRouter {
     }
     return new NotFoundHandler();
   }
- 
+
   match(req: RequestContextBase): IRouteHandler | null {
     for (let route of this.routes) {
       let handler = route.match(req);
-      if (handler != null)
-        return handler;
+      if (handler != null) return handler;
     }
     return null;
   }
@@ -112,16 +109,15 @@ export class Router implements IRouter {
 
 export class LogInterceptor implements IInterceptor {
   process(req: RequestContextBase, res: Response): void {
-
-    if (req.url.searchParams.get("debug") !== "true") {
+    if (req.url.searchParams.get('debug') !== 'true') {
       return;
     }
-    req.log("Executing log interceptor");
-    let logStr = encodeURIComponent(req.getLines().join("\n"));
-    this.inject(logStr, res); 
+    req.log('Executing log interceptor');
+    let logStr = encodeURIComponent(req.getLines().join('\n'));
+    this.inject(logStr, res);
   }
   inject(log: string, res: Response): void {
-    res.headers.append("X-DEBUG", log);
+    res.headers.append('X-DEBUG', log);
   }
 }
 
@@ -137,8 +133,8 @@ export class NotFoundHandler implements IRouteHandler {
   async handle(req: RequestContextBase): Promise<Response> {
     return new Response(undefined, {
       status: 404,
-      statusText: "Unknown route"
-    })
+      statusText: 'Unknown route',
+    });
   }
 }
 
@@ -152,8 +148,8 @@ export class MethodNotAllowedHandler implements IRouteHandler {
   async handle(req: RequestContextBase): Promise<Response> {
     return new Response(undefined, {
       status: 405,
-      statusText: "Method not allowed"
-    })
+      statusText: 'Method not allowed',
+    });
   }
 }
 
@@ -164,21 +160,20 @@ export class HandlerFactory {
     this.providerHandlers.push(
       new GdaxSpotHandler(),
       new BitfinexSpotHandler()
-    )
+    );
   }
 
   public getProviderHandlers(): IRouteHandler[] {
     return this.providerHandlers;
   }
-
 }
 
 export class PingRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
-    if (req.request.method !== "GET") {
+    if (req.request.method !== 'GET') {
       return new MethodNotAllowedHandler();
     }
-    if (req.url.pathname.startsWith("/api/ping")) {
+    if (req.url.pathname.startsWith('/api/ping')) {
       return new PingRouteHandler();
     }
     return null;
@@ -187,7 +182,7 @@ export class PingRoute implements IRoute {
 
 export class PingRouteHandler implements IRouteHandler {
   async handle(req: RequestContextBase): Promise<Response> {
-    const pong = "pong;"
+    const pong = 'pong;';
     let res = new Response(pong);
     req.log(`Responding with ${pong} and ${res.status}`);
     return new Response(pong);
@@ -196,23 +191,22 @@ export class PingRouteHandler implements IRouteHandler {
 
 export class BadRequest {
   public static fromString(statusText: string): Response {
-    return new Response(undefined, {status: 400, statusText: statusText})
+    return new Response(undefined, { status: 400, statusText: statusText });
   }
 }
 
 export class RaceRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
     let url = new URL(req.request.url);
-    if (url.pathname.startsWith("/api/race/")) {
-      return new RacerHandler()
+    if (url.pathname.startsWith('/api/race/')) {
+      return new RacerHandler();
     }
     return null;
   }
 }
 
 export class RacerHandler implements IRouteHandler {
-
-  constructor(private handlers: IRouteHandler[] = []) {    
+  constructor(private handlers: IRouteHandler[] = []) {
     let factory = new HandlerFactory();
     this.handlers = factory.getProviderHandlers();
   }
@@ -221,7 +215,10 @@ export class RacerHandler implements IRouteHandler {
     return this.race(req, this.handlers);
   }
 
-  async race(req: RequestContextBase, responders: IRouteHandler[]): Promise<Response> {
+  async race(
+    req: RequestContextBase,
+    responders: IRouteHandler[]
+  ): Promise<Response> {
     let arr = responders.map(r => r.handle(req));
     return Promise.race(arr);
   }
@@ -229,8 +226,7 @@ export class RacerHandler implements IRouteHandler {
 
 export class AllRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
-    
-    if (req.url.pathname.startsWith("/api/all/")) {
+    if (req.url.pathname.startsWith('/api/all/')) {
       return new AllHandler();
     }
     return null;
@@ -243,33 +239,36 @@ export class AllHandler implements IRouteHandler {
     this.handlers = factory.getProviderHandlers();
   }
 
-  handle(req: RequestContextBase): Promise<Response> {    
+  handle(req: RequestContextBase): Promise<Response> {
     return this.all(req, this.handlers);
   }
 
-  async all(req: RequestContextBase, handlers: IRouteHandler[] ): Promise<Response> {    
-    let p = await Promise.all(handlers.map(h => h.handle(req)));        
+  async all(
+    req: RequestContextBase,
+    handlers: IRouteHandler[]
+  ): Promise<Response> {
+    let p = await Promise.all(handlers.map(h => h.handle(req)));
     let arr = p.map(p => p.body);
-    return new Response(JSON.stringify(arr));    
+    return new Response(JSON.stringify(arr));
   }
 }
 
 export class DirectRoute implements IRoute {
   match(req: RequestContextBase): IRouteHandler | null {
-    if (req.url.pathname.startsWith("/api/direct")) {
-      console.log("Direct...")
+    if (req.url.pathname.startsWith('/api/direct')) {
+      console.log('Direct...');
       //Split and filter any empty
       // /api/direct/gdax/btc-spot
-      let parts = req.url.pathname.split("/").filter(val => val);
+      let parts = req.url.pathname.split('/').filter(val => val);
       console.log(parts);
       if (parts.length > 2) {
         let provider = parts[2];
         switch (provider) {
-          case "gdax":
+          case 'gdax':
             return new GdaxSpotHandler();
-          case "bitfinex":
+          case 'bitfinex':
             return new BitfinexSpotHandler();
-          default:          
+          default:
             return new NotFoundHandler();
         }
       }
@@ -298,7 +297,7 @@ export class Symbol {
   public static fromString(str: string): Symbol {
     let symbolParts = str.split('-');
     if (symbolParts.length != 2 || !symbolParts[0] || !symbolParts[1]) {
-      throw new Error("Invalid symbol");
+      throw new Error('Invalid symbol');
     }
     return new Symbol(symbolParts[0], symbolParts[1]);
   }
@@ -314,14 +313,13 @@ export class SpotPrice {
 }
 
 export class DirectParser {
-  public parse(url: URL): {type: string, symbol: Symbol} {
-    
+  public parse(url: URL): { type: string; symbol: Symbol } {
     let parts = url.pathname
-      .replace(new RegExp("\/api\/(direct|race|all)[\/(gdax|bitfinex)]+"), "") //strip the part we know
-      .split("/") //so left with /spot/btc-usd. split
-      .filter(val => val) //filter any empty
-      console.log(parts);
-      return {type: parts[0], symbol: Symbol.fromString(parts[1])};
+      .replace(new RegExp('/api/(direct|race|all)[/(gdax|bitfinex)]+'), '') //strip the part we know
+      .split('/') //so left with /spot/btc-usd. split
+      .filter(val => val); //filter any empty
+    console.log(parts);
+    return { type: parts[0], symbol: Symbol.fromString(parts[1]) };
   }
 }
 
@@ -342,10 +340,8 @@ export class DirectParser {
 //  * }
 //  */
 export class GdaxSpotHandler implements ICryptoSpotApi, IRouteHandler {
-
   parser = new DirectParser();
-  constructor() {
-  }
+  constructor() {}
 
   async handle(req: RequestContextBase): Promise<Response> {
     let result = this.parser.parse(req.url);
@@ -363,7 +359,7 @@ export class GdaxSpotHandler implements ICryptoSpotApi, IRouteHandler {
 
   private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
     let json: any = await res.json();
-    return new SpotPrice(symbol.toString(), json.price, json.time, "gdax");
+    return new SpotPrice(symbol.toString(), json.price, json.time, 'gdax');
   }
 }
 
@@ -390,16 +386,13 @@ export class GdaxSymbolFormatter implements ISymbolFormatter {
   }
  */
 export class BitfinexSpotHandler implements ICryptoSpotApi, IRouteHandler {
-  
   parser = new DirectParser();
-  constructor() {
-  }
-  
+  constructor() {}
+
   async handle(req: RequestContextBase): Promise<Response> {
     let result = this.parser.parse(req.url);
     let spot = await this.getSpot(Symbol.fromString(result.symbol.toString()));
     return new Response(JSON.stringify(spot));
-
   }
 
   async getSpot(symbol: Symbol): Promise<SpotPrice> {
@@ -412,10 +405,11 @@ export class BitfinexSpotHandler implements ICryptoSpotApi, IRouteHandler {
   private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
     let json: any = await res.json();
     return new SpotPrice(
-      symbol.toString(), 
-      json.last_price, 
-      new Date(parseFloat(json.timestamp) * 1000).toISOString(), 
-      "bitfinex");
+      symbol.toString(),
+      json.last_price,
+      new Date(parseFloat(json.timestamp) * 1000).toISOString(),
+      'bitfinex'
+    );
   }
 }
 
@@ -425,19 +419,16 @@ export class BitfinexSymbolFormatter implements ISymbolFormatter {
   }
 }
 
+// var exports = {};
 // addEventListener('fetch', event => {
-//   event.respondWith(fetchAndLog(event.request))
-// })
+//   event.respondWith(fetchAndLog(event.request));
+// });
 
 // /**
 //  * Fetch and log a given request object
 //  * @param {Request} request
 //  */
 // async function fetchAndLog(request) {
-//   // console.log('Got request', request)
-//   // const response = await fetch(request)
-//   // console.log('Got response', response)
-//   // return response
-//   let h = new exports.RequestHandler();
-//   return h.handle(request);
+//   let r = new Router();
+//   return r.handle(request);
 // }
