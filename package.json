@@ -1,13 +1,13 @@
 {
-  "name": "cloudflare",
+  "name": "crypto-service-worker",
   "version": "0.0.0",
-  "description": "cloudflare",
+  "description": "Crypto API Reverse Proxy",
   "license": "MIT",
   "repository": "",
   "author": {
     "name": "",
     "email": "steven.pack.code@gmail.com",
-    "url": ""
+    "url": "https://github.com/stevenpack/"
   },
   "keywords": [
     ""

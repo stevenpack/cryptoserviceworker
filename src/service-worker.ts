@@ -1,8 +1,21 @@
 //mock the methods and objects that will be available in the browser
+// --BEGIN COMMENT--
 import fetch from 'node-fetch';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
 import { URL } from 'url';
+const window = {};
+// --END COMMENT--
+// --BEGIN UNCOMMENT--
+// addEventListener('fetch', event => {
+//   event.respondWith(fetchAndLog(event.request))
+// })
+
+// async function fetchAndLog(request) {
+//   let router = new exports.Router();
+//   return router.handle(request);
+// }
+// --END UNCOMMENT--
 
 //==== Framework ====//
 
@@ -35,16 +48,18 @@ export interface IInterceptor {
 }
 
 export interface ILogger {
-  log(logLine: string): void;
+  debug(logLine: string): void;
+  info(logLine: string): void;
+  warn(logLine: string): void;
+  error(logLine: string): void;
   getLines() : string[];
 }
 
 /**
- * Request with logging added
+ * Request with additional convenience properties
  */
-export class RequestContextBase implements ILogger { 
+export class RequestContextBase{ 
 
-  public logLines: string[] = [];
   public url: URL;
   constructor(public request: Request) {
     this.url = new URL(request.url);
@@ -53,8 +68,24 @@ export class RequestContextBase implements ILogger {
   public static fromString(str: string) {
     return new RequestContextBase(new Request(str));
   }
+}
 
-  log(logLine: string): void {
+export class Logger implements ILogger {
+  debug(logLine: string): void {
+    this.log(`DEBUG: ${logLine}`);
+  }
+  info(logLine: string): void {
+    this.log(`INFO: ${logLine}`);
+  }
+  warn(logLine: string): void {
+    this.log(`WARN: ${logLine}`);
+  }
+  error(logLine: string): void {
+    this.log(`ERROR: ${logLine}`);
+  }
+  public logLines: string[] = [];
+
+  private log(logLine: string): void {
     console.log(logLine);
     this.logLines.push(logLine);
   }
@@ -62,6 +93,9 @@ export class RequestContextBase implements ILogger {
     return this.logLines;
   } 
 }
+
+//Check is in scope like this in worker, or needs to be on window.
+const logger = new Logger();
 
 export class Router implements IRouter {
 
@@ -76,17 +110,16 @@ export class Router implements IRouter {
       new AllRoute(),
       new DirectRoute()
     ];
-    this.interceptors = [new LogInterceptor];
+    this.interceptors = [new LogInterceptor, new CacheInterceptor];
   }
 
-  async handle(request: Request): Promise<Response> {
+  public async handle(request: Request): Promise<Response> {
     let req = new RequestContextBase(request);
     let res = this.preProcess(req);
-    if (res) {
-      return res;
-    }
-    let handler = this.route(req);
-    res = await handler.handle(req);
+    if (!res) {
+      let handler = this.route(req);
+      res = await handler.handle(req);
+    }    
     res = this.postProcess(req, res)
     return res;
   }
@@ -115,7 +148,7 @@ export class Router implements IRouter {
   route(req: RequestContextBase): IRouteHandler {
     let handler: IRouteHandler | null = this.match(req);
     if (handler) {
-      req.log(`Found handler for ${req.url.pathname}`);
+      logger.debug(`Found handler for ${req.url.pathname}`);
       return handler;
     }
     return new NotFoundHandler();
@@ -140,11 +173,12 @@ export class LogInterceptor implements IInterceptor {
   }
   
   postProcess(req: RequestContextBase, res: Response): Response {
-    if (req.url.searchParams.get("debug") !== "true") {
+    logger.debug("Evaluating request for log request")
+    if (req.url.searchParams.get("debug") !== "true" && req.request.headers.get("X-DEBUG") !== "true") {
       return res;
     }
-    req.log("Executing log interceptor");
-    let logStr = encodeURIComponent(req.getLines().join("\n"));
+    logger.info("Executing log interceptor");
+    let logStr = encodeURIComponent(logger.getLines().join("\n"));
     this.inject(logStr, res); 
     return res;
   }
@@ -163,8 +197,10 @@ export class CacheInterceptor implements IInterceptor {
 
   preProcess(req: RequestContextBase, res: Response): Response | null {    
     //if the cache header or query param is there, use cache
+    logger.debug("Evaluating CacheInterceptor...");
     let maxAgeMs = this.getMaxAgeMs(req);
     if (maxAgeMs > 0) {
+      logger.info(`maxAgeMs ${maxAgeMs} > 0, checking cache`);
       //use cache if not expired
       let entry = this.cache.tryGetEntry<Response>(req.url.pathname, maxAgeMs);
       if (entry == null) {
@@ -174,6 +210,7 @@ export class CacheInterceptor implements IInterceptor {
       //use the cached version      
       res = entry.item;
       res.headers.set("Age", entry.ageSecs().toString())
+      //status code?
     }  
     return res;
   }
@@ -185,10 +222,11 @@ export class CacheInterceptor implements IInterceptor {
   }
 
   private getMaxAgeMs(req: RequestContextBase): number {
-    let maxAgeParam = req.url.searchParams.get("maxAge");
+    let maxAgeParam = req.url.searchParams.get("max-age");
     if (maxAgeParam) {
       try {
         let maxAgeSecs = parseInt(maxAgeParam);
+        logger.debug(`Got max-age=${maxAgeSecs} from query params`);
         return maxAgeSecs * 1000;
       } catch (e) {
         //TODO: bad request
@@ -200,6 +238,7 @@ export class CacheInterceptor implements IInterceptor {
       let maxAgeValue = maxAgeHeader.replace("max-age=", "");
       try {
         let maxAgeSecs = parseInt(maxAgeValue);
+        logger.debug(`Got max-age=${maxAgeSecs} from Cache-Control header`);
         return maxAgeSecs * 1000;
       } catch (e) {
         //TODO: bad request
@@ -219,10 +258,14 @@ export class CacheInterceptor implements IInterceptor {
 export class WindowCache {
   
   window: any;
-  constructor(window: any) {    
-    //TODO: include logging about whether the cache existed (or if we were destroyed in between invocations)
-    this.window = window || {};
-    this.window.cache = {};    
+  constructor(windowObj: any = null) {    
+    logger.debug(`windowObj=${windowObj}`)
+    logger.debug(`window=${window}`)
+    this.window = windowObj || window || {};
+    if (!window.cache) {
+      logger.info("Recreating cache from scratch");
+      this.window.cache = {};      
+    }    
   }
 
   public tryGetEntry<T>(key: string, maxAgeMs: number): CacheEntry<T> | null {
@@ -237,10 +280,14 @@ export class WindowCache {
   }
 
   public getEntry<T>(key: string): CacheEntry<T> | null {
-    return this.window.cache[key];
+    logger.debug(`Checking for entry at ${key}`);
+    let entry = this.window.cache[key] as CacheEntry<T>;
+    logger.debug(entry ? `entry.ageMs=${entry.ageMs()}ms` : `Not found`);
+    return entry;
   }
 
   public setEntry<T>(key: string, entry: CacheEntry<T>) {
+    logger.info(`Storing entry at ${key}`);
     this.window.cache[key] = entry;
   }
 }
@@ -325,7 +372,7 @@ export class PingRouteHandler implements IRouteHandler {
   async handle(req: RequestContextBase): Promise<Response> {
     const pong = "pong;"
     let res = new Response(pong);
-    req.log(`Responding with ${pong} and ${res.status}`);
+    logger.info(`Responding with ${pong} and ${res.status}`);
     return new Response(pong);
   }
 }
@@ -559,19 +606,3 @@ export class BitfinexSymbolFormatter implements ISymbolFormatter {
   }
 }
 
-// addEventListener('fetch', event => {
-//   event.respondWith(fetchAndLog(event.request))
-// })
-
-// /**
-//  * Fetch and log a given request object
-//  * @param {Request} request
-//  */
-// async function fetchAndLog(request) {
-//   // console.log('Got request', request)
-//   // const response = await fetch(request)
-//   // console.log('Got response', response)
-//   // return response
-//   let h = new exports.RequestHandler();
-//   return h.handle(request);
-// }
