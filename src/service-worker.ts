@@ -7,6 +7,7 @@ import { URL } from 'url';
 const window = {};
 // --END COMMENT--
 // --BEGIN UNCOMMENT--
+// var exports = {}
 // addEventListener('fetch', event => {
 //   event.respondWith(fetchAndLog(event.request))
 // })
@@ -24,16 +25,10 @@ export interface IRouter {
 }
 
 /**
-<<<<<<< HEAD
  * A route
  *
  * TODO: perf: Big object just for matching. Only 1 will be used.
  *       could be match and just a factory method.
-=======
- * A route.
- * 
- * Used to match an /api call to a IRouteHandler
->>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
  */
 export interface IRoute {
   match(req: RequestContextBase): IRouteHandler | null;
@@ -49,19 +44,6 @@ export interface IRouteHandler {
 /**
  * Intercepts requests before handlers and responses after handlers
  */
-<<<<<<< HEAD
-export interface ILogDecorator {
-  intercept(req: ILogger, res: ILogger): Response;
-}
-
-export interface ILogInjector {
-  inject(log: string, res: Response): void;
-}
-
-export interface ILogger {
-  log(logLine: string): void;
-  getLines(): string[];
-=======
 export interface IInterceptor {
   preProcess(req: RequestContextBase, res: Response | null): Response | null;
   postProcess(req: RequestContextBase, res: Response): Response | null;
@@ -73,19 +55,13 @@ export interface ILogger {
   warn(logLine: string): void;
   error(logLine: string): void;
   getLines() : string[];
->>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
 }
 
 /**
  * Request with additional convenience properties
  */
-<<<<<<< HEAD
-export class RequestContextBase implements ILogger {
-  public logLines: string[] = [];
-=======
 export class RequestContextBase{ 
 
->>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
   public url: URL;
   constructor(public request: Request) {
     this.url = new URL(request.url);
@@ -135,11 +111,7 @@ export class Router implements IRouter {
       new AllRoute(),
       new DirectRoute(),
     ];
-<<<<<<< HEAD
-    this.interceptors = [new LogInterceptor()];
-=======
     this.interceptors = [new LogInterceptor, new CacheInterceptor];
->>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
   }
 
   public async handle(request: Request): Promise<Response> {
@@ -192,16 +164,6 @@ export class Router implements IRouter {
   }
 }
 
-<<<<<<< HEAD
-export class LogInterceptor implements IInterceptor {
-  process(req: RequestContextBase, res: Response): void {
-    if (req.url.searchParams.get('debug') !== 'true') {
-      return;
-    }
-    req.log('Executing log interceptor');
-    let logStr = encodeURIComponent(req.getLines().join('\n'));
-    this.inject(logStr, res);
-=======
 //=== Interceptors ===
 
 export class LogInterceptor implements IInterceptor {
@@ -219,7 +181,6 @@ export class LogInterceptor implements IInterceptor {
     let logStr = encodeURIComponent(logger.getLines().join("\n"));
     this.inject(logStr, res); 
     return res;
->>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
   }
 
   inject(log: string, res: Response): void {
@@ -433,11 +394,7 @@ export class RaceRoute implements IRoute {
 }
 
 export class RacerHandler implements IRouteHandler {
-<<<<<<< HEAD
-  constructor(private handlers: IRouteHandler[] = []) {
-=======
   constructor(private handlers: IRouteHandler[] = []) {    
->>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
     let factory = new HandlerFactory();
     this.handlers = factory.getProviderHandlers();
   }
@@ -456,13 +413,8 @@ export class RacerHandler implements IRouteHandler {
 }
 
 export class AllRoute implements IRoute {
-<<<<<<< HEAD
-  match(req: RequestContextBase): IRouteHandler | null {
-    if (req.url.pathname.startsWith('/api/all/')) {
-=======
   match(req: RequestContextBase): IRouteHandler | null {    
     if (req.url.pathname.startsWith("/api/all/")) {
->>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
       return new AllHandler();
     }
     return null;
@@ -655,19 +607,3 @@ export class BitfinexSymbolFormatter implements ISymbolFormatter {
   }
 }
 
-<<<<<<< HEAD
-// var exports = {};
-// addEventListener('fetch', event => {
-//   event.respondWith(fetchAndLog(event.request));
-// });
-
-// /**
-//  * Fetch and log a given request object
-//  * @param {Request} request
-//  */
-// async function fetchAndLog(request) {
-//   let r = new Router();
-//   return r.handle(request);
-// }
-=======
->>>>>>> 58f5865946a6fa4d3d48119a8189789939e2b922
