@@ -4,9 +4,7 @@ import {
   RacerHandler,
   RequestContextBase,
   AllHandler,
-  SpotPrice,
-  WindowCache,
-  CacheEntry
+  SpotPrice
 } from '../src/service-worker';
 import { Request } from 'node-fetch';
 import { Response } from 'node-fetch';
@@ -15,7 +13,7 @@ class DelayedResponder implements IRouteHandler {
   constructor(private delay: number, private response: any) {}
 
   handle(req: RequestContextBase): Promise<Response> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve, _) => {
       setTimeout(() => {
         resolve(new Response(this.response));
       }, this.delay);
@@ -34,7 +32,7 @@ async function pingApi(queryParams: string = ''): Promise<Response> {
 async function handleRequest(url: string, debug: boolean = true): Promise<Response> {
   let req = new Request(url);
   if (debug) {
-    console.log("requesting X-DEBUG=true")
+    console.log("requesting X-DEBUG=true");
     req.headers.append("X-DEBUG", "true");
   }
   let router = new Router();
@@ -54,43 +52,43 @@ describe('unit', () => {
     console.log(decodeURIComponent(debug));
     expect(debug.length).toBeGreaterThan(0);
   });
-  
+
   test('Log header absent by default ', async () => {
     let res = await pingApi("?debug=xxx");
     expect(res.headers.has('X-DEBUG')).toBeFalsy();
   });
-  
-  
+
+
   test('Ping', async () => {
     let res = await pingApi();
     let result = await res.body;
     console.log(JSON.stringify(result));
     expect(res.status).toEqual(200);
   });
-  
+
   test('Fastest wins', async () => {
     let responders = [
       new DelayedResponder(10, 'fast'),
       new DelayedResponder(100, 'slow'),
     ];
-    
+
     let request = new Request(
       'https://cryptoserviceworker.com/api/gdax/spot/btc-usd'
     );
     let req = new RequestContextBase(request);
-    
+
     const racer = new RacerHandler();
     let res = await racer.race(req, responders);
     console.log(`winner: ${res.body}`);
     expect(res.body).toEqual('fast');
   });
-  
-  test('All returns all', async() => {
+
+  test('All returns all', async () => {
     let responders = [
       new DelayedResponder(50, "text"),
-      new DelayedResponder(75, "text2"),    
+      new DelayedResponder(75, "text2"),
       new DelayedResponder(100, "{\"strongly\": \"typed\"}"),
-      new DelayedResponder(100, "{\"very_strongly\": \"typed2\"}")    
+      new DelayedResponder(100, "{\"very_strongly\": \"typed2\"}")
     ];
     let req = RequestContextBase.fromString("http://cryptoserviceworker.com/api/all/spot/btc-usd");
     let aggregator = new AllHandler();
@@ -101,7 +99,7 @@ describe('unit', () => {
     expect(obj).toContain("text2");
     //TODO: parsing of json
   });
-  
+
   test('Routes should care about method', async () => {
     let req = new Request(
       'https://cryptoserviceworker.com/api/ping', {
@@ -112,32 +110,9 @@ describe('unit', () => {
     let res = await router.handle(req);
     expect(res).not.toBeNull();
     expect(res.status).toEqual(405); //not allowed
-  });
-
-    
-  test('cache get with max-age', async () => {
-    let cache = new WindowCache();
-    let res = new Response("test");
-    let item = new CacheEntry(res);  
-    cache.setEntry("a", item);
-    let cachedItem = cache.tryGetEntry<Response>("a", 50);
-    expect(cachedItem).not.toBeNull(); //should still be there 
-    setTimeout(() => {
-      let expiredCachedItem = cache.tryGetEntry<Response>("a", 50);
-      console.log("Tried to get item with 50ms expiry after 100ms. Got: " + expiredCachedItem);
-      expect(expiredCachedItem).toBeNull(); //should have expired after 100ms
-    }, 100);
-  });
-
-  test('cache set and get', () => {
-    let cache = new WindowCache();
-    let res = new Response("test");
-    let item = new CacheEntry(res);  
-    cache.setEntry("a", item);
-    let cachedItem = cache.getEntry<Response>("a");
-    expect(cachedItem.item.body).toEqual("test");
-  });
+  })
 });
+
 
 describe('integration', () => {
   test('INT: gdax spot', async () => {
@@ -149,7 +124,7 @@ describe('integration', () => {
     console.log(`${JSON.stringify(spot)}`);
     expect(spot.symbol).toEqual('btc-usd');
   });
-  
+
   test('INT: bitfinex spot', async () => {
     let res = await handleRequest('https://cryptoserviceworker.com/api/direct/bitfinex/spot/btc-usd');
     expect(res).not.toBeNull();
@@ -159,8 +134,8 @@ describe('integration', () => {
     console.log(`${JSON.stringify(spot)}`);
     expect(spot.symbol).toEqual('btc-usd');
   });
-  
-  
+
+
   test('INT: fastest spot', async () => {
     let res = await handleRequest('https://cryptoserviceworker.com/api/race/spot/btc-usd');
     console.log('INT: race');
@@ -169,7 +144,7 @@ describe('integration', () => {
     console.log(`${JSON.stringify(spot)}`);
     expect(spot.symbol).toEqual('btc-usd');
   });
-  
+
   test('INT: aggregate spot', async () => {
     let res = await handleRequest('https://cryptoserviceworker.com/api/all/spot/btc-usd');
     console.log('INT: all');
@@ -179,28 +154,29 @@ describe('integration', () => {
     //TODO: the results come back as an array of strings...
     expect(JSON.parse(result[0]).symbol).toEqual("btc-usd");
     expect(JSON.parse(result[1]).symbol).toEqual("btc-usd");
-  });
-  
-
-
-  
-  test('INT: get with cache', async () => {
-    //get, expect no cache
-    let res = await handleRequest("http://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd?max-age=60");
-    expect(res).not.toBeNull();
-    expect(res.status).toBe(200);
-    expect(res.headers.get("Age")).toBeNull();
-  
-    //get again, expect cache (and be faster!)
-    res = await handleRequest("http://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd?max-age=60");
-    expect(res).not.toBeNull();
-    expect(res.status).toBe(200);
-    let age = res.headers.get("Age");
-    console.log(`age: ${age}`);
-    expect(age).not.toBeNull();
-  
   })
 });
+
+
+
+
+//   test('INT: get with cache', async () => {
+//     //get, expect no cache
+//     let res = await handleRequest("http://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd?max-age=60");
+//     expect(res).not.toBeNull();
+//     expect(res.status).toBe(200);
+//     expect(res.headers.get("Age")).toBeNull();
+//
+//     //get again, expect cache (and be faster!)
+//     res = await handleRequest("http://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd?max-age=60");
+//     expect(res).not.toBeNull();
+//     expect(res.status).toBe(200);
+//     let age = res.headers.get("Age");
+//     console.log(`age: ${age}`);
+//     expect(age).not.toBeNull();
+//
+//   })
+// });
 
 
 
