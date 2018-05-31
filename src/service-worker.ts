@@ -373,7 +373,7 @@ export class SpotPrice {
 export class DirectParser {
   public parse(url: URL): { type: string; symbol: Symbol } {
     // language=JSRegexp
-    const parts = url.pathname       
+    const parts = url.pathname
       .replace(new RegExp("/api/(direct|race|all)[/(gdax|bitfinex)]+"), '') // strip the part we know
       .split('/') // so left with /spot/btc-usd. split
       .filter(val => val); // filter any empty
