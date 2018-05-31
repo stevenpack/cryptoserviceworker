@@ -152,7 +152,6 @@ describe('integration', () => {
   test('INT: aggregate spot', async () => {
     let res = await handleRequest('https://cryptoserviceworker.com/api/all/spot/btc-usd');
     console.log('INT: all');
-    console.log(JSON.stringify(res));
     let result = await res.json();
     console.log(result);
     //Check for multiple results

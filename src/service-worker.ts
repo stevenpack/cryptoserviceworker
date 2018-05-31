@@ -1,20 +1,20 @@
 // mock the methods and objects that will be available in the browser
 // --BEGIN COMMENT--
-// import fetch from 'node-fetch';
-// import { Request } from 'node-fetch';
-// import { Response } from 'node-fetch';
-// import { URL } from 'url';
+import fetch from 'node-fetch';
+import { Request } from 'node-fetch';
+import { Response } from 'node-fetch';
+import { URL } from 'url';
 // --END COMMENT--
 // --BEGIN UNCOMMENT--
-var exports = {};
-addEventListener('fetch', event => {
-  event.respondWith(fetchAndLog(event.request))
-});
-
-async function fetchAndLog(request) {
-  let router = new exports.Router();
-  return await router.handle(request);
-}
+// var exports = {};
+// addEventListener('fetch', event => {
+//   event.respondWith(fetchAndLog(event.request))
+// });
+//
+// async function fetchAndLog(request) {
+//   let router = new exports.Router();
+//   return await router.handle(request);
+// }
 // --END UNCOMMENT--
 
 // ==== Framework ====//
@@ -300,15 +300,9 @@ export class AllHandler implements IRouteHandler {
     handlers: IRouteHandler[]
   ): Promise<Response> {
 
-    let all = [];
-    for (let h of handlers) {
-      let res = await h.handle(req);
-      let json = await res.json();
-      logger.debug(`pushing json: ${JSON.stringify(json)}`);
-      all.push(json);
-    }
-
-    return new Response(JSON.stringify(all));
+    let responses = await Promise.all(handlers.map(async h => await h.handle(req)));
+    let jsonArr = await Promise.all(responses.map(async r => await r.json()));
+    return new Response(JSON.stringify(jsonArr));
   }
 }
 
