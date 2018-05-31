@@ -1,20 +1,20 @@
 // mock the methods and objects that will be available in the browser
 // --BEGIN COMMENT--
-import fetch from 'node-fetch';
-import { Request } from 'node-fetch';
-import { Response } from 'node-fetch';
-import { URL } from 'url';
+// import fetch from 'node-fetch';
+// import { Request } from 'node-fetch';
+// import { Response } from 'node-fetch';
+// import { URL } from 'url';
 // --END COMMENT--
 // --BEGIN UNCOMMENT--
-// var exports = {}
-// addEventListener('fetch', event => {
-//   event.respondWith(fetchAndLog(event.request))
-// })
-//
-// async function fetchAndLog(request) {
-//   let router = new exports.Router();
-//   return router.handle(request);
-// }
+var exports = {};
+addEventListener('fetch', event => {
+  event.respondWith(fetchAndLog(event.request))
+});
+
+async function fetchAndLog(request) {
+  let router = new exports.Router();
+  return await router.handle(request);
+}
 // --END UNCOMMENT--
 
 // ==== Framework ====//
@@ -290,23 +290,32 @@ export class AllHandler implements IRouteHandler {
   }
 
   public handle(req: RequestContextBase): Promise<Response> {
-    return this.all(req, this.handlers);
+    let all = this.all(req, this.handlers);
+    logger.debug("Returning 'all' response");
+    return all;
   }
 
   public async all(
     req: RequestContextBase,
     handlers: IRouteHandler[]
   ): Promise<Response> {
-    const p = await Promise.all(handlers.map(h => h.handle(req)));
-    const arr = p.map(p => p.body);
-    return new Response(JSON.stringify(arr));
+
+    let all = [];
+    for (let h of handlers) {
+      let res = await h.handle(req);
+      let json = await res.json();
+      logger.debug(`pushing json: ${JSON.stringify(json)}`);
+      all.push(json);
+    }
+
+    return new Response(JSON.stringify(all));
   }
 }
 
 export class DirectRoute implements IRoute {
   public match(req: RequestContextBase): IRouteHandler | null {
     if (req.url.pathname.startsWith('/api/direct')) {
-      console.log('Direct...');
+      logger.debug('Direct...');
       // Split and filter any empty
       // /api/direct/gdax/btc-spot
       const parts = req.url.pathname.split('/').filter(val => val);
@@ -404,12 +413,19 @@ export class GdaxSpotHandler implements ICryptoSpotApi, IRouteHandler {
     const fmt = new GdaxSymbolFormatter();
     const symbolFmt = fmt.format(symbol);
     const url = `https://api.gdax.com/products/${symbolFmt}/ticker`;
-    const res = await fetch(url);
+    logger.debug(`Getting spot from ${url}`);
+
+    // GDAX requires a User-Agent.
+    let headers = { "User-Agent"   : "CryptoServiceWorker" };
+    const res = await fetch(url, { headers : headers });
     return this.parseSpot(symbol, res);
   }
 
   private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
+    logger.debug(`Parsing spot...`);
+    //this has an empty response saying "need user agent". add above and test.
     const json: any = await res.json();
+    logger.debug(`GDAX response ${JSON.stringify(json)}`);
     return new SpotPrice(symbol.toString(), json.price, json.time, 'gdax');
   }
 }
@@ -455,6 +471,7 @@ export class BitfinexSpotHandler implements ICryptoSpotApi, IRouteHandler {
 
   private async parseSpot(symbol: Symbol, res: Response): Promise<SpotPrice> {
     const json: any = await res.json();
+    logger.debug(`Bitfinex response ${JSON.stringify(json)}`);
     return new SpotPrice(
       symbol.toString(),
       json.last_price,

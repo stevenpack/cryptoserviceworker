@@ -30,6 +30,7 @@ async function pingApi(queryParams: string = ''): Promise<Response> {
 }
 
 async function handleRequest(url: string, debug: boolean = true): Promise<Response> {
+
   let req = new Request(url);
   if (debug) {
     console.log("requesting X-DEBUG=true");
@@ -123,6 +124,9 @@ describe('integration', () => {
     let spot: SpotPrice = await res.json();
     console.log(`${JSON.stringify(spot)}`);
     expect(spot.symbol).toEqual('btc-usd');
+    expect(spot.price).not.toBeNull();
+    let price = parseFloat(spot.price);
+    expect(price).toBeGreaterThan(0);
   });
 
   test('INT: bitfinex spot', async () => {
@@ -148,12 +152,13 @@ describe('integration', () => {
   test('INT: aggregate spot', async () => {
     let res = await handleRequest('https://cryptoserviceworker.com/api/all/spot/btc-usd');
     console.log('INT: all');
+    console.log(JSON.stringify(res));
     let result = await res.json();
     console.log(result);
     //Check for multiple results
     //TODO: the results come back as an array of strings...
-    expect(JSON.parse(result[0]).symbol).toEqual("btc-usd");
-    expect(JSON.parse(result[1]).symbol).toEqual("btc-usd");
+    expect(result[0].symbol).toEqual("btc-usd");
+    expect(result[1].symbol).toEqual("btc-usd");
   })
 });
 
