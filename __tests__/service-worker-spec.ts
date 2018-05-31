@@ -13,7 +13,7 @@ class DelayedResponder implements IRouteHandler {
   constructor(private delay: number, private response: any) {}
 
   handle(req: RequestContextBase): Promise<Response> {
-    return new Promise((resolve, _) => {
+    return new Promise((resolve, ) => {
       setTimeout(() => {
         resolve(new Response(this.response));
       }, this.delay);
@@ -86,19 +86,16 @@ describe('unit', () => {
 
   test('All returns all', async () => {
     let responders = [
-      new DelayedResponder(50, "text"),
-      new DelayedResponder(75, "text2"),
       new DelayedResponder(100, "{\"strongly\": \"typed\"}"),
       new DelayedResponder(100, "{\"very_strongly\": \"typed2\"}")
     ];
     let req = RequestContextBase.fromString("http://cryptoserviceworker.com/api/all/spot/btc-usd");
-    let aggregator = new AllHandler();
-    let res = await aggregator.all(req, responders);
-    let obj = JSON.parse(await res.text());
+    let handler = new AllHandler();
+    let res = await handler.all(req, responders);
+    let obj = await res.json();
     //check our objects are there.
-    expect(obj).toContain("text");
-    expect(obj).toContain("text2");
-    //TODO: parsing of json
+    expect(obj[0].strongly).toEqual("typed");
+    expect(obj[1].very_strongly).toEqual("typed2");
   });
 
   test('Routes should care about method', async () => {

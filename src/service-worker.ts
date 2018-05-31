@@ -350,26 +350,31 @@ export class Symbol {
   public static fromString(str: string): Symbol {
     const symbolParts = str.split('-');
     if (symbolParts.length != 2 || !symbolParts[0] || !symbolParts[1]) {
-      throw new Error('Invalid symbol');
+      throw new Error(`Invalid symbol from ${str}`);
     }
     return new Symbol(symbolParts[0], symbolParts[1]);
   }
 }
 
 export class SpotPrice {
-  constructor(
-    public symbol: string,
-    public price: string,
-    private utcTime: string,
-    private provider: string
-  ) {}
+  public symbol: string;
+  public price: string;
+  public utcTime: string;
+  public provider: string;
+  constructor(symbol: string, price: string, utcTime: string, provider: string) {
+    // Using longhand to satisfy the unused variable linter
+    this.symbol = symbol;
+    this.price = price;
+    this.utcTime = utcTime;
+    this.provider = provider;
+  }
 }
 
 export class DirectParser {
   public parse(url: URL): { type: string; symbol: Symbol } {
     // language=JSRegexp
     const parts = url.pathname
-      .replace(new RegExp("/api/(direct|race|all)[/(gdax|bitfinex)]+"), '') // strip the part we know
+      .replace(new RegExp("/api/(direct|race|all)/(gdax|bitfinex)+"), '') // strip the part we know
       .split('/') // so left with /spot/btc-usd. split
       .filter(val => val); // filter any empty
     console.log(parts);
