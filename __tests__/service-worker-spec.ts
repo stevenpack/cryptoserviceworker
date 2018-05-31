@@ -138,7 +138,7 @@ describe('integration', () => {
 
 
   test('INT: fastest spot', async () => {
-    let res = await handleRequest('https://cryptoserviceworker.com/api/race/spot/btc-usd');
+    let res = await handleRequest('https://www.cryptoserviceworker.com/api/race/spot/btc-usd');
     console.log('INT: race');
     console.log(res.body);
     let spot: SpotPrice = await res.json();
@@ -147,7 +147,7 @@ describe('integration', () => {
   });
 
   test('INT: aggregate spot', async () => {
-    let res = await handleRequest('https://cryptoserviceworker.com/api/all/spot/btc-usd');
+    let res = await handleRequest('https://www.cryptoserviceworker.com/api/all/spot/btc-usd');
     console.log('INT: all');
     let result = await res.json();
     console.log(result);
