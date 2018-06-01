@@ -2,5 +2,13 @@
   "extends": [
     "tslint:latest",
     "tslint-config-prettier"
-  ]
+  ],
+  "rules": {
+    "max-classes-per-file": true
+  },
+  "linterOptions": {
+    "exclude": [
+      "__tests__"
+    ]
+  }
 }
