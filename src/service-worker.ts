@@ -1,18 +1,19 @@
 // mock the methods and objects that will be available in the browser
 // --BEGIN COMMENT--
-// import { Request, Response } from 'node-fetch';
-// import { URL } from 'url';
+import fetch from 'node-fetch';
+import { Request, Response } from 'node-fetch';
+import { URL } from 'url';
 // --END COMMENT--
 // --BEGIN UNCOMMENT--
-var exports = {};
-addEventListener('fetch', event => {
-  event.respondWith(fetchAndLog(event.request))
-});
-
-async function fetchAndLog(request) {
-  let router = new exports.Router();
-  return await router.handle(request);
-}
+// var exports = {};
+// addEventListener('fetch', event => {
+//   event.respondWith(fetchAndLog(event.request))
+// });
+//
+// async function fetchAndLog(request) {
+//   let router = new exports.Router();
+//   return await router.handle(request);
+// }
 // --END UNCOMMENT--
 
 // ==== Framework ====//
@@ -24,8 +25,7 @@ export interface IRouter {
 /**
  * A route
  *
- * TODO: perf: Big object just for matching. Only 1 will be used.
- *       could be match and just a factory method.
+ * note: Single method object overkill. The handlers could just implement.
  */
 export interface IRoute {
   match(req: RequestContextBase): IRouteHandler | null;
@@ -181,9 +181,12 @@ export class LogInterceptor implements IInterceptor {
     ) {
       return res;
     }
-    logger.info('Executing log interceptor');
-    const logStr = encodeURIComponent(logger.getLines().join('\n'));
-    res.headers.append('X-DEBUG', logStr);
+    logger.info('Executing log interceptorX1');
+    const lines = logger.getLines();
+    const logStr = encodeURIComponent(lines.join('\n'));
+    const debugHeader = 'X-DEBUG';
+    logger.debug(`Adding to ${debugHeader} header ${logStr.length} lchars`);
+    res.headers.append(debugHeader, logStr);
     return res;
   }
 }

@@ -115,6 +115,17 @@ describe('unit', () => {
     expect(res).not.toBeNull();
     expect(res.status).toEqual(405); //not allowed
   });
+
+  test('Debug info available', async () => {
+    let res = await pingApi();
+    expect(res.headers.get('X-DEBUG')).toBeNull();
+    let res2 = await pingApi('?debug=true');
+    expect(res2.headers.get('X-DEBUG')).not.toBeNull();
+
+    console.info("DEBUG INFO:");
+    console.info(res2.headers.get('X-DEBUG'));
+  })
+
 });
 
 describe('integration', () => {
