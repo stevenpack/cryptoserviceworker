@@ -1,19 +1,21 @@
 // mock the methods and objects that will be available in the browser
 // --BEGIN COMMENT--
-import fetch from 'node-fetch';
-import { Request, Response } from 'node-fetch';
-import { URL } from 'url';
+// import fetch from 'node-fetch';
+// // tslint:disable-next-line:no-duplicate-imports
+// import { Request, Response } from 'node-fetch';
+// import { URL } from 'url';
 // --END COMMENT--
 // --BEGIN UNCOMMENT--
-// var exports = {};
-// addEventListener('fetch', event => {
-//   event.respondWith(fetchAndLog(event.request))
-// });
-//
-// async function fetchAndLog(request) {
-//   let router = new exports.Router();
-//   return await router.handle(request);
-// }
+var exports = {};
+addEventListener('fetch', event => {
+  event.respondWith(fetchAndLog(event.request))
+});
+
+async function fetchAndLog(request) {
+  let router = new exports.Router();
+  return await router.handle(request);
+}
+
 // --END UNCOMMENT--
 
 // ==== Framework ====//
@@ -24,8 +26,6 @@ export interface IRouter {
 
 /**
  * A route
- *
- * note: Single method object overkill. The handlers could just implement.
  */
 export interface IRoute {
   match(req: RequestContextBase): IRouteHandler | null;

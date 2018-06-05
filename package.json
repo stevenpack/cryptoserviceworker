@@ -39,6 +39,8 @@
     "@types/node": "^8.0.0",
     "@types/whatwg-fetch": "0.0.33",
     "coveralls": "^2.0.0",
+    "grunt": "^1.0.3",
+    "grunt-replace": "^1.0.1",
     "jest": "^20.0.4",
     "jest-cli": "^22.4.3",
     "jest-environment-node-debug": "^2.0.0",
