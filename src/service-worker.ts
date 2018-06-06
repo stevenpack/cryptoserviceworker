@@ -1,25 +1,24 @@
-// mock the methods and objects that will be available in the browser
+// --BEGIN PREAMBLE--
+/// var exports = {};
+/// addEventListener('fetch', event => {
+///   event.respondWith(fetchAndLog(event.request))
+/// });
+///
+/// async function fetchAndLog(request) {
+///   let router = new exports.Router();
+///   return await router.handle(request);
+/// }
+// --END PREAMBLE--
+
 // --BEGIN COMMENT--
-// import fetch from 'node-fetch';
-// // tslint:disable-next-line:no-duplicate-imports
-// import { Request, Response } from 'node-fetch';
-// import { URL } from 'url';
+// mock the methods and objects that will be available in the browser
+import fetch from 'node-fetch';
+// tslint:disable-next-line:no-duplicate-imports
+import { Request, Response } from 'node-fetch';
+import { URL } from 'url';
 // --END COMMENT--
-// --BEGIN UNCOMMENT--
-var exports = {};
-addEventListener('fetch', event => {
-  event.respondWith(fetchAndLog(event.request))
-});
-
-async function fetchAndLog(request) {
-  let router = new exports.Router();
-  return await router.handle(request);
-}
-
-// --END UNCOMMENT--
 
 // ==== Framework ====//
-
 export interface IRouter {
   route(req: RequestContextBase): IRouteHandler;
 }
@@ -295,7 +294,7 @@ export class AllHandler implements IRouteHandler {
   constructor(private readonly handlers: IRouteHandler[] = []) {
     if (handlers.length === 0) {
       const factory = new HandlerFactory();
-      logger.error("No handlers, getting from factory");
+      logger.error('No handlers, getting from factory');
       this.handlers = factory.getProviderHandlers();
     }
   }
@@ -424,7 +423,9 @@ export class GdaxSpotHandler implements ICryptoSpotApi, IRouteHandler {
     logger.debug(`Getting spot from ${url}`);
 
     // GDAX requires a User-Agent.
-    const res = await fetch(url, {headers: { 'User-Agent': 'CryptoServiceWorker' }});
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'CryptoServiceWorker' },
+    });
     return this.parseSpot(symbol, res);
   }
 
