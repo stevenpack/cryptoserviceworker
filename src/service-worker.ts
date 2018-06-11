@@ -37,20 +37,11 @@ export interface IRouteHandler {
   handle(req: RequestContextBase): Promise<Response>;
 }
 
-/**
- * Intercepts requests before handlers and responses after handlers
- */
-export interface IInterceptor {
-  preProcess(req: RequestContextBase, res: Response | null): Response | null;
-  postProcess(req: RequestContextBase, res: Response): Response | null;
-}
-
 export interface ILogger {
   debug(logLine: string): void;
   info(logLine: string): void;
   warn(logLine: string): void;
   error(logLine: string): void;
-  getLines(): string[];
 }
 
 /**
@@ -68,28 +59,19 @@ export class RequestContextBase {
 }
 
 export class Logger implements ILogger {
-  public logLines: string[] = [];
+  private log = console;
 
   public debug(logLine: string): void {
-    this.log(`DEBUG: ${logLine}`);
+    this.log.debug(`${logLine}`);
   }
   public info(logLine: string): void {
-    this.log(`INFO: ${logLine}`);
+    this.log.info(`${logLine}`);
   }
   public warn(logLine: string): void {
-    this.log(`WARN: ${logLine}`);
+    this.log.warn(`${logLine}`);
   }
   public error(logLine: string): void {
-    this.log(`ERROR: ${logLine}`);
-  }
-  public getLines(): string[] {
-    return this.logLines;
-  }
-
-  private log(logLine: string): void {
-    // tslint:disable-next-line:no-console
-    console.log(logLine);
-    this.logLines.push(logLine);
+    this.log.error(`${logLine}`);
   }
 }
 
@@ -97,7 +79,6 @@ const logger = new Logger();
 
 export class Router implements IRouter {
   public routes: IRoute[];
-  public interceptors: IInterceptor[];
 
   constructor() {
     this.routes = [
@@ -106,18 +87,19 @@ export class Router implements IRouter {
       new AllRoute(),
       new DirectRoute(),
     ];
-    this.interceptors = [new LogInterceptor()];
   }
 
   public async handle(request: Request): Promise<Response> {
-    const req = new RequestContextBase(request);
-    let res = this.preProcess(req);
-    if (!res) {
+    try {
+      const req = new RequestContextBase(request);
       const handler = this.route(req);
-      res = await handler.handle(req);
+      return handler.handle(req);
+    } catch (e) {
+      return new Response(undefined, {
+        status: 500,
+        statusText: `Error. ${e.message}`,
+      });
     }
-    res = this.postProcess(req, res);
-    return res;
   }
 
   public route(req: RequestContextBase): IRouteHandler {
@@ -137,54 +119,6 @@ export class Router implements IRouter {
       }
     }
     return null;
-  }
-
-  /**
-   * Run the interceptors and return their response if provided, or the original
-   * @param req
-   */
-  private preProcess(req: RequestContextBase): Response | null {
-    let preProcessResponse = null;
-    for (const interceptor of this.interceptors) {
-      preProcessResponse = interceptor.preProcess(req, preProcessResponse);
-    }
-    return preProcessResponse;
-  }
-
-  private postProcess(req: RequestContextBase, res: Response): Response {
-    let postProcessResponse = null;
-    for (const interceptor of this.interceptors) {
-      postProcessResponse = interceptor.postProcess(
-        req,
-        postProcessResponse || res
-      );
-    }
-    return postProcessResponse || res;
-  }
-}
-
-// === Interceptors ===
-
-export class LogInterceptor implements IInterceptor {
-  public preProcess(req: RequestContextBase, res: Response): Response {
-    return res;
-  }
-
-  public postProcess(req: RequestContextBase, res: Response): Response {
-    logger.debug('Evaluating request for log request');
-    if (
-      req.url.searchParams.get('debug') !== 'true' &&
-      req.request.headers.get('X-DEBUG') !== 'true'
-    ) {
-      return res;
-    }
-    logger.info('Executing log interceptorX1');
-    const lines = logger.getLines();
-    const logStr = encodeURIComponent(lines.join('\n'));
-    const debugHeader = 'X-DEBUG';
-    logger.debug(`Adding to ${debugHeader} header ${logStr.length} lchars`);
-    res.headers.append(debugHeader, logStr);
-    return res;
   }
 }
 
@@ -292,7 +226,7 @@ export class AllHandler implements IRouteHandler {
   constructor(private readonly handlers: IRouteHandler[] = []) {
     if (handlers.length === 0) {
       const factory = new HandlerFactory();
-      logger.error('No handlers, getting from factory');
+      logger.debug('No handlers, getting from factory');
       this.handlers = factory.getProviderHandlers();
     }
   }
