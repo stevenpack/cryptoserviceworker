@@ -93,7 +93,6 @@ export class Logger implements ILogger {
   }
 }
 
-// Check is in scope like this in worker, or needs to be on window.
 const logger = new Logger();
 
 export class Router implements IRouter {
@@ -101,7 +100,6 @@ export class Router implements IRouter {
   public interceptors: IInterceptor[];
 
   constructor() {
-    // no ioc
     this.routes = [
       new PingRoute(),
       new RaceRoute(),
