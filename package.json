@@ -24,7 +24,7 @@
     "prepublish": "npm run build",
     "prebuild": "npm run clean && npm run format && npm run lint && echo Using TypeScript && tsc --version",
     "build": "grunt fix-comments && tsc build/*.ts --pretty --skipLibCheck; grunt fix-export",
-    "upload": "grunt upload-worker",
+    "upload": "grunt cf-upload-worker",
     "test": "jest",
     "coverage": "jest --coverage",
     "watch": "npm run build -- --watch",

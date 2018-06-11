@@ -1,12 +1,12 @@
 // --BEGIN PREAMBLE--
 /// var exports = {};
 /// addEventListener('fetch', event => {
-///   event.respondWith(fetchAndLog(event.request))
+///   event.respondWith(fetchAndApply(event.request))
 /// });
 ///
-/// async function fetchAndLog(request) {
+/// async function fetchAndApply(request) {
 ///   let router = new exports.Router();
-///   return await router.handle(request);
+///   return router.handle(request);
 /// }
 // --END PREAMBLE--
 
