@@ -46,6 +46,45 @@ module.exports = function (grunt) {
     }
   });
 
+  grunt.registerTask('fix-comments', 'replace:comments');
+  grunt.registerTask('fix-export', 'replace:exports');
+
+  grunt.registerTask('upload-worker', 'Uploads workers to Cloudflare', async function(path) {
+    const done = this.async();
+    const conf = readConfig();
+    path = path || grunt.option('path') || process.env.CF_WORKER_PATH;
+    if (!path) {
+      fail("path is required");
+    }
+    if (!fs.existsSync(path)) {
+      fail(`path not found ${path}`);
+    }
+
+    let script = fs.readFileSync(path);
+    log.info("Uploading...");
+    let url = `https://api.cloudflare.com/client/v4/zones/${conf.zoneId}/workers/script`;
+    let options = {
+      url: url,
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/javascript'
+      },
+      body: script
+    };
+    requestAndProcess(options, conf, done);
+  });
+
+  grunt.registerTask('list-workers', 'List Cloudflare workers configured for this zone', async function() {
+    const done = this.async();
+    const conf = readConfig();
+    log.info("Listing...");
+    let url = `https://api.cloudflare.com/client/v4/zones/${conf.zoneId}/workers/filters`;
+    let options = {
+      url: url,
+      method: 'GET'
+    };
+    requestAndProcess(options, conf, done);
+  });
 
   function requestAndProcess(options, conf, done) {
 
@@ -119,43 +158,4 @@ module.exports = function (grunt) {
   function fail(message) {
     grunt.fail.fatal(message, TASK_FAILED);
   }
-
-  grunt.registerTask('upload-worker', 'Uploads workers to Cloudflare', async function(path) {
-    const done = this.async();
-    const conf = readConfig();
-    path = path || grunt.option('path') || process.env.CF_WORKER_PATH;
-    if (!path) {
-      fail("path is required");
-    }
-    if (!fs.existsSync(path)) {
-      fail(`path not found ${path}`);
-    }
-
-    let script = fs.readFileSync(path);
-    log.info("Uploading...");
-    let url = `https://api.cloudflare.com/client/v4/zones/${conf.zoneId}/workers/script`;
-    let options = {
-      url: url,
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/javascript'
-      },
-      body: script
-    };
-    requestAndProcess(options, conf, done);
-  });
-
-  grunt.registerTask('list-workers', 'List Cloudflare workers configured for this zone', async function() {
-    const done = this.async();
-    const conf = readConfig();
-    log.info("Listing...");
-    let url = `https://api.cloudflare.com/client/v4/zones/${conf.zoneId}/workers/filters`;
-    let options = {
-      url: url,
-      method: 'GET'
-    };
-    requestAndProcess(options, conf, done);
-  });
-  grunt.registerTask('fix-comments', 'replace:comments');
-  grunt.registerTask('fix-export', 'replace:exports');
 };
