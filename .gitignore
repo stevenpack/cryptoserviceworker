@@ -7,3 +7,5 @@ lib_test
 build
 .idea/
 .env
+src/*.js
+__tests__/*.js

@@ -50,19 +50,6 @@ async function handleRequest(
 }
 
 describe('unit', () => {
-  test('Log header present on request', async () => {
-    let res = await pingApi('?debug=true');
-    expect(res.headers.has('X-DEBUG')).toBeTruthy();
-    const debug = res.headers.get('X-DEBUG');
-    console.log('X-Debug Decoded:');
-    console.log(decodeURIComponent(debug));
-    expect(debug.length).toBeGreaterThan(0);
-  });
-
-  test('Log header absent by default ', async () => {
-    let res = await pingApi('?debug=xxx');
-    expect(res.headers.has('X-DEBUG')).toBeFalsy();
-  });
 
   test('Ping', async () => {
     let res = await pingApi();
@@ -116,15 +103,6 @@ describe('unit', () => {
     expect(res.status).toEqual(405); //not allowed
   });
 
-  test('Debug info available', async () => {
-    let res = await pingApi();
-    expect(res.headers.get('X-DEBUG')).toBeNull();
-    let res2 = await pingApi('?debug=true');
-    expect(res2.headers.get('X-DEBUG')).not.toBeNull();
-
-    console.info('DEBUG INFO:');
-    console.info(res2.headers.get('X-DEBUG'));
-  });
 });
 
 describe('integration', () => {
@@ -180,39 +158,3 @@ describe('integration', () => {
   });
 });
 
-//   test('INT: get with cache', async () => {
-//     //get, expect no cache
-//     let res = await handleRequest("http://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd?max-age=60");
-//     expect(res).not.toBeNull();
-//     expect(res.status).toBe(200);
-//     expect(res.headers.get("Age")).toBeNull();
-//
-//     //get again, expect cache (and be faster!)
-//     res = await handleRequest("http://cryptoserviceworker.com/api/direct/gdax/spot/btc-usd?max-age=60");
-//     expect(res).not.toBeNull();
-//     expect(res.status).toBe(200);
-//     let age = res.headers.get("Age");
-//     console.log(`age: ${age}`);
-//     expect(age).not.toBeNull();
-//
-//   })
-// });
-
-// test('bad requests are 400', () => {
-//   let badUrls = [
-//     'https://cryptoserviceworker.com/apiXX/race/spot/btc-usd',
-//     'https://cryptoserviceworker.com/api/XXX/spot/btc-usd',
-//     'https://cryptoserviceworker.com/api/race/XXX/btc-usd',
-//     'https://cryptoserviceworker.com/api/race/spot/btcusd',
-//     'https://cryptoserviceworker.com/rando',
-//     'https://cryptoserviceworker.com/*&()&*)&(*UIKJ',
-//   ];
-
-//   let badRequests = badUrls.map(url => new Request(url, { method: 'GET' }));
-//   let parser = new RequestParser();
-//   for (let badReq of badRequests) {
-//     let res = parser.validate(badReq);
-//     expect(res).not.toBeNull();
-//     expect(res.status).toEqual(400);
-//   }
-// });
