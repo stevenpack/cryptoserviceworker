@@ -188,13 +188,13 @@ export class RaceRoute implements IRoute {
   public match(req: RequestContextBase): IRouteHandler | null {
     const url = new URL(req.request.url);
     if (url.pathname.startsWith('/api/race/')) {
-      return new RacerHandler();
+      return new RaceHandler();
     }
     return null;
   }
 }
 
-export class RacerHandler implements IRouteHandler {
+export class RaceHandler implements IRouteHandler {
   constructor(private readonly handlers: IRouteHandler[] = []) {
     const factory = new HandlerFactory();
     this.handlers = factory.getProviderHandlers();
@@ -236,7 +236,7 @@ export class AllHandler implements IRouteHandler {
       this.handlers.map(async h => h.handle(req))
     );
     const jsonArr = await Promise.all(responses.map(async r => r.json()));
-    return new Response(JSON.stringify(jsonArr));
+    return new Response(JSON.stringify(jsonArr, 0, 2));
   }
 }
 

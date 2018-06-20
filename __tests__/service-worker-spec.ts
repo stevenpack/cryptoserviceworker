@@ -2,7 +2,7 @@
 import {
   Router,
   IRouteHandler,
-  RacerHandler,
+  RaceHandler,
   RequestContextBase,
   AllHandler,
   SpotPrice,
@@ -50,7 +50,6 @@ async function handleRequest(
 }
 
 describe('unit', () => {
-
   test('Ping', async () => {
     let res = await pingApi();
     let result = await res.body;
@@ -69,7 +68,7 @@ describe('unit', () => {
     );
     let req = new RequestContextBase(request);
 
-    const racer = new RacerHandler();
+    const racer = new RaceHandler();
     let res = await racer.race(req, responders);
     console.log(`winner: ${res.body}`);
     expect(res.body).toEqual('fast');
@@ -102,7 +101,6 @@ describe('unit', () => {
     expect(res).not.toBeNull();
     expect(res.status).toEqual(405); //not allowed
   });
-
 });
 
 describe('integration', () => {
@@ -157,4 +155,3 @@ describe('integration', () => {
     expect(result[1].symbol).toEqual('btc-usd');
   });
 });
-
