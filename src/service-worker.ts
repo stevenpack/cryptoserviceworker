@@ -280,7 +280,7 @@ export class UIRoute implements IRoute {
 export class UIHandler implements IRouteHandler {
   public async handle(req: RequestContextBase): Promise<Response> {
     const html =
-      '<html><head></head><body><h1>Workers serve UIs too</h1></body></html>;';
+      '<html><head></head><body><h1>Workers serve UIs too</h1></body></html>';
     logger.debug(`Returning html`);
     let headers = new Headers();
     headers.append('Content-Type', 'text/html');
