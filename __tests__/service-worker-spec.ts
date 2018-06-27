@@ -57,6 +57,13 @@ describe('unit', () => {
     expect(res.status).toEqual(200);
   });
 
+  test('UI', async () => {
+    let res = await handleRequest('https://cryptoserviceworker.com/ui');
+    let result = await res.body;
+    console.log(JSON.stringify(result));
+    expect(JSON.stringify(result)).toContain('<html>');
+  });
+
   test('Fastest wins', async () => {
     let responders = [
       new DelayedResponder(10, 'fast'),
@@ -100,6 +107,16 @@ describe('unit', () => {
     let res = await router.handle(req);
     expect(res).not.toBeNull();
     expect(res.status).toEqual(405); //not allowed
+  });
+
+  test('Debug info available', async () => {
+    let res = await pingApi();
+    expect(res.headers.get('X-DEBUG')).toBeNull();
+    let res2 = await pingApi('?debug=true');
+    expect(res2.headers.get('X-DEBUG')).not.toBeNull();
+
+    console.info('DEBUG INFO:');
+    console.info(res2.headers.get('X-DEBUG'));
   });
 });
 

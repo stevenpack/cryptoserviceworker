@@ -141,13 +141,14 @@ module.exports = function (grunt) {
     let email = grunt.option('email') || process.env.CF_WORKER_EMAIL;
     let apiKey = grunt.option('apiKey') || process.env.CF_WORKER_AUTH_KEY;
 
+    if (!zoneId || !email || !apiKey) {
+      fail("zone id, cloudflare email and api key are required");
+    }
+
     log.debug("zoneID: " + zoneId);
     log.debug("email: " + email);
     log.debug("apiKey: " + "*".repeat(apiKey.length));
 
-    if (!zoneId || !email || !apiKey) {
-      fail("zone id, cloudflare email and api key are required");
-    }
     return {
       zoneId: zoneId,
       email: email,
