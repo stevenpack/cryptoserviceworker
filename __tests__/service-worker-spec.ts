@@ -71,6 +71,13 @@ describe('unit', () => {
     expect(res.status).toEqual(200);
   });
 
+  test('UI', async () => {
+    let res = await handleRequest('https://cryptoserviceworker.com/ui');
+    let result = await res.body;
+    console.log(JSON.stringify(result));
+    expect(JSON.stringify(result)).toContain('<html>');
+  });
+
   test('Fastest wins', async () => {
     let responders = [
       new DelayedResponder(10, 'fast'),
@@ -96,7 +103,7 @@ describe('unit', () => {
     let req = RequestContextBase.fromString(
       'http://cryptoserviceworker.com/api/all/spot/btc-usd'
     );
-    console.log("Creating with delayed responders...");
+    console.log('Creating with delayed responders...');
     let handler = new AllHandler(responders);
     let res = await handler.handle(req);
     let obj = await res.json();
@@ -122,10 +129,9 @@ describe('unit', () => {
     let res2 = await pingApi('?debug=true');
     expect(res2.headers.get('X-DEBUG')).not.toBeNull();
 
-    console.info("DEBUG INFO:");
+    console.info('DEBUG INFO:');
     console.info(res2.headers.get('X-DEBUG'));
-  })
-
+  });
 });
 
 describe('integration', () => {

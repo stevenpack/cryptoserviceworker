@@ -1,6 +1,7 @@
 // mock the methods and objects that will be available in the browser
 // --BEGIN COMMENT--
 import fetch from 'node-fetch';
+// tslint:disable-next-line:no-duplicate-imports
 import { Request, Response } from 'node-fetch';
 import { URL } from 'url';
 // --END COMMENT--
@@ -108,6 +109,7 @@ export class Router implements IRouter {
       new RaceRoute(),
       new AllRoute(),
       new DirectRoute(),
+      new UIRoute(),
     ];
     this.interceptors = [new LogInterceptor()];
   }
@@ -295,7 +297,7 @@ export class AllHandler implements IRouteHandler {
   constructor(private readonly handlers: IRouteHandler[] = []) {
     if (handlers.length === 0) {
       const factory = new HandlerFactory();
-      logger.error("No handlers, getting from factory");
+      logger.error('No handlers, getting from factory');
       this.handlers = factory.getProviderHandlers();
     }
   }
@@ -330,6 +332,28 @@ export class DirectRoute implements IRoute {
       }
     }
     return null;
+  }
+}
+
+export class UIRoute implements IRoute {
+  public match(req: RequestContextBase): IRouteHandler | null {
+    if (req.request.method !== 'GET') {
+      return new MethodNotAllowedHandler();
+    }
+    if (req.url.pathname.startsWith('/ui')) {
+      return new UIHandler();
+    }
+    return null;
+  }
+}
+
+export class UIHandler implements IRouteHandler {
+  public async handle(req: RequestContextBase): Promise<Response> {
+    const html =
+      '<html><head></head><body><h1>Workers serve UIs too</h1></body></html>;';
+    const res = new Response(html);
+    logger.debug(`Returning html`);
+    return new Response(html);
   }
 }
 
@@ -424,7 +448,9 @@ export class GdaxSpotHandler implements ICryptoSpotApi, IRouteHandler {
     logger.debug(`Getting spot from ${url}`);
 
     // GDAX requires a User-Agent.
-    const res = await fetch(url, {headers: { 'User-Agent': 'CryptoServiceWorker' }});
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'CryptoServiceWorker' },
+    });
     return this.parseSpot(symbol, res);
   }
 
